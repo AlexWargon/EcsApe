@@ -5,7 +5,8 @@ using System.Runtime.CompilerServices;
 using Unity.Collections.LowLevel.Unsafe;
 
 namespace Wargon.Escape {
-    public class Query{
+    public class Query {
+        internal World WorldInternal => _world;
         private readonly World _world;
         protected int[] entities;
         private int[] entityMap;
@@ -93,7 +94,7 @@ namespace Wargon.Escape {
         public ref Entity Entity(int index) {
             return ref _world.GetEntity(entities[index]);
         }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void Remove(int entity) {
             if (!Has(entity)) return;
             var indx = entityMap[entity] - 1;
@@ -134,6 +135,8 @@ namespace Wargon.Escape {
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool Has(int entity) {
+            if (entityMap.Length <= entity)
+                return false;
             return entityMap[entity] > 0;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -348,22 +351,11 @@ namespace Wargon.Escape {
         }
     }
 
-    public unsafe struct Ref<T> : IComponent where T : struct, IComponent {
-        private unsafe void* value;
-        public ref T Value => ref UnsafeUtility.AsRef<T>(value);
-
-        public Ref(T item) {
-            value = null;
-            UnsafeUtility.WriteArrayElement(value,0,item);
-        }
-    }
     internal struct Mask {
-        public int[] Types;
+        public readonly int[] Types;
         public int Count;
-        private readonly World _world;
         public Mask(int size, World world) {
             Types = new int[size];
-            _world = world;
             Count = 0;
         }
 

@@ -4,46 +4,56 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Wargon.Escape {
+    
+    public interface IComponent { }
+    public interface ISingletoneComponent { }
+    public interface IEventComponent { }
+    
     public readonly ref struct Component<T> where T : struct, IComponent {
         public static readonly int Index;
         public static readonly Type Type;
         public static readonly bool IsSingleTone;
         public static readonly bool IsTag;
-
+        public static readonly bool IsEvent;
         static Component() {
             Type = typeof(T);
             Index = Component.GetIndex(Type);
             IsSingleTone = typeof(ISingletoneComponent).IsAssignableFrom(Type);
+            IsEvent = typeof(IEventComponent).IsAssignableFrom(Type);
             IsTag = Type.GetFields().Length == 0;
+            Component.AddInfo(Index, AsComponentInfo());
         }
 
-        public Component(int idx, bool singleTone, bool tag) {
-            index = idx;
-            isSingleTone = singleTone;
-            isTag = tag;
+        public Component(int idx, bool singleTone, bool tag, bool @event) {
+            this.index = idx;
+            this.isSingleTone = singleTone;
+            this.isTag = tag;
+            this.isEvent = @event;
         }
         public readonly int index;
         public readonly bool isSingleTone;
         public readonly bool isTag;
+        public readonly bool isEvent;
         public static Component<T> AsRef() {
-            return new Component<T>(Index, IsSingleTone, IsTag);
+            return new Component<T>(Index, IsSingleTone, IsTag, IsEvent);
         }
         public static ComponentInfo AsComponentInfo() {
-            return new ComponentInfo(Index, Type, IsSingleTone, IsTag);
+            return new ComponentInfo(Index, Type, IsSingleTone, IsTag, IsEvent);
         }
     }
 
     public readonly struct ComponentInfo {
         public readonly int Index;
         public readonly Type Type;
-        public readonly bool IsSingletone;
-        public readonly bool IsTag;
-
-        public ComponentInfo(int index, Type type, bool isSingletone, bool isTag) {
-            Index = index;
-            Type = type;
-            IsSingletone = isSingletone;
-            IsTag = isTag;
+        public readonly bool isSingletone;
+        public readonly bool isTag;
+        public readonly bool isEvent;
+        public ComponentInfo(int index, Type type, bool isSingletone, bool isTag, bool isEvent) {
+            this.Index = index;
+            this.Type = type;
+            this.isSingletone = isSingletone;
+            this.isTag = isTag;
+            this.isEvent = isEvent;
         }
     }
 
@@ -54,10 +64,11 @@ namespace Wargon.Escape {
     public struct Component {
         private static readonly Dictionary<int, Type> typeByIndex;
         private static readonly Dictionary<Type, int> indexByType;
-
+        private static ComponentInfo[] ComponentInfos;
         static Component() {
             typeByIndex = new Dictionary<int, Type>();
             indexByType = new Dictionary<Type, int>();
+            ComponentInfos = new ComponentInfo[32];
         }
 
         public static int GetIndex(Type type) {
@@ -68,15 +79,25 @@ namespace Wargon.Escape {
             ComponentTypes.Count++;
             return index;
         }
-
+        
         public static Type GetComponentType(int index) {
             return typeByIndex[index];
         }
+
+        internal static void AddInfo(int index, ComponentInfo info) {
+            if (ComponentInfos.Length -1  == index) {
+                Array.Resize(ref ComponentInfos, index * 2);
+            }
+            ComponentInfos[index] = info;
+        }
+
+        internal static ref ComponentInfo GetInfo(int index) {
+            return ref ComponentInfos[index];
+        }
+        internal static ref ComponentInfo GetInfoByType(Type type) {
+            return ref ComponentInfos[GetIndex(type)];
+        }
     }
-
-    public interface IComponent { }
-
-    public interface ISingletoneComponent { }
 
     public interface IPool {
         int Count { get; }
@@ -87,23 +108,27 @@ namespace Wargon.Escape {
         void AddBoxed(object component, int entity);
         void Remove(int entity);
         bool Has(int entity);
-
         static IPool New(int size, int typeIndex) {
-            var type = Component.GetComponentType(typeIndex);
-            var poolType = type.MakeGenericType(typeof(Pool<>));
-            var pool = (IPool)Activator.CreateInstance(poolType, new[] { size });
+            var info = Component.GetInfo(typeIndex);
+            var componentType = Component.GetComponentType(typeIndex);
+            var poolType = info.isTag || info.isSingletone || info.isEvent ? typeof(TagPool<>) : typeof(Pool<>);
+            var pool = (IPool)Generic.New(poolType, componentType, size);
             return pool;
         }
-
         void Resize(int newSize);
         IComponent GetRaw(int index);
     }
 
+    public static class Generic {
+        public static object New(Type genericType, Type elementsType, params object[] parameters) {
+            return Activator.CreateInstance(genericType.MakeGenericType(elementsType), parameters);
+        }
+    }
     public interface ITurplePool<T> : IPool where T : ITuple {
         ref T Get(int entity);
         void Add(in T component, int entity);
     }
-
+             
     public interface IPool<T> : IPool where T : struct, IComponent {
         ref T Get(int entity);
         ref T Get(ref Entity entity);
@@ -118,7 +143,6 @@ namespace Wargon.Escape {
         private int count;
         private T data;
         private int[] entities;
-
         public TagPool(int size) {
             data = default;
             entities = new int[size];
@@ -191,7 +215,6 @@ namespace Wargon.Escape {
             return self;
         }
     }
-
     internal class Pool<T> : IPool<T> where T : struct, IComponent {
         private readonly IPool self;
         private int count;
@@ -226,7 +249,6 @@ namespace Wargon.Escape {
         public void Add(int entity) {
             if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
             entities[entity] = count;
-            data[count] = default;
             count++;
             OnAdd?.Invoke(entity);
         }
@@ -325,28 +347,8 @@ namespace Wargon.Escape {
         void Execute(ref Entity entity, float deltaTime);
     }
 
-    public sealed class EntityTestSystem : IEntitySystem {
-        public void OnCreate(World world) {
-            Query = world.GetQuery().With<TestEvent>();
-        }
-
-        public Query Query { get; set; }
-
-        public void Execute(ref Entity entity, float deltaTime) { }
-    }
-
     public interface IOnAdd {
         void Execute(ref Entity entity);
-    }
-
-    internal sealed class TestTrigger : ITriggerSystem {
-        public Query Trigger { get; set; }
-
-        public void OnCreate(World world) {
-            Trigger = world.GetQuery().With<TestEvent>();
-        }
-
-        public void Execute(ref Entity entity) { }
     }
 
     public abstract class OnAdd<T> : ISystem, IOnAdd where T : struct, IComponent {
@@ -370,63 +372,141 @@ namespace Wargon.Escape {
         }
     }
 
-    internal struct TestEvent : IComponent { }
 
     /// <summary>
-    ///     Execute every frame
+    /// Execute every frame
     /// </summary>
     public interface ISystem {
         void OnCreate(World world); // ReSharper disable Unity.PerformanceAnalysis
         void OnUpdate(float dt);
     }
 
+    sealed class ClearEventsSystem<T> : ISystem where T: struct, IComponent {
+        private TagPool<T> _pool;
+        private Query _query;
+        public void OnCreate(World world) {
+            _pool = (TagPool<T>)world.GetPool<T>();
+            _query = world.GetQuery().With<T>();
+        }
+        public void OnUpdate(float dt) {
+            if (!_query.IsEmpty) {
+                foreach (var entity in _query) {
+                    _pool.Remove(entity.Index);   
+                }
+            }
+        }
+    }
+    public struct DestroyEntity : IComponent { }
+    sealed class DestroyEntitiesSystem : ISystem {
+        private Query query;
+        private World _world;
+        public void OnCreate(World world) {
+            query = world.GetQuery().With<DestroyEntity>();
+            _world = world;
+        }
+
+        public void OnUpdate(float dt) {
+            if(query.IsEmpty) return;
+            foreach (ref var entity in query) {
+                _world.OnDestroyEntity(in entity);
+            }
+        }
+    }
+
+    public abstract class SkipFrameSystem : ISystem {
+        private int skip;
+        private int counter;
+        private float skippedDeltaTime;
+        protected void Skip(int frames) {
+            skip = frames;
+            counter = 0;
+        }
+        public abstract void OnCreate(World world);
+        void ISystem.OnUpdate(float dt) {
+            if (counter == 0) {
+                Execute(skippedDeltaTime);
+                skippedDeltaTime = 0f;
+                counter = skip;
+            }
+            else {
+                counter--;
+                skippedDeltaTime += dt;
+            }
+        }
+        protected abstract void Execute(float skippedDeltaTime);
+    }
+    public sealed class DefaultSystems {
+        internal readonly List<ISystem> Start = new ();
+        internal readonly List<ISystem> End = new ();
+        internal bool Enabled = true;
+        internal void Disable() => Enabled = false;
+
+        internal void Init() {
+            End.Add(new DestroyEntitiesSystem());
+        }
+    }
     public sealed class Systems {
+        private readonly DefaultSystems _defaultSystems;
         private readonly List<Group> _groups;
         private readonly World _world;
         private ISystem[] _updates;
-        private int updatesCount;
-
+        private int _updatesCount;
         public Systems(World world) {
             _world = world;
             _updates = new ISystem[32];
-            updatesCount = 0;
+            _updatesCount = 0;
             _groups = new List<Group>();
+            _defaultSystems = new DefaultSystems();
         }
 
         public void Init() {
+            _defaultSystems.Init();
+            if(_defaultSystems.Enabled)
+                foreach (var system in _defaultSystems.Start)
+                    AddSystem(system);
+
             foreach (var group in _groups)
                 for (var i = 0; i < group.count; i++) {
                     var s = group._systems[i];
-                    s.OnCreate(_world);
                     AddSystem(s);
                 }
+            if(_defaultSystems.Enabled)
+                foreach (var system in _defaultSystems.End)
+                    AddSystem(system);
         }
 
+        public Systems Clear<T>() where T : struct, IComponent {
+            AddSystem(new ClearEventsSystem<T>());
+            return this;
+        }
+        public Systems DisableDefaultSystems() {
+            _defaultSystems.Disable();
+            return this;
+        }
         public Systems Add<T>() where T : class, ISystem, new() {
             var t = new T();
-            t.OnCreate(_world);
             AddSystem(t);
             return this;
         }
 
         public Systems Add<T>(T system) where T : class, ISystem {
-            system.OnCreate(_world);
             AddSystem(system);
             return this;
         }
 
         private void AddSystem(ISystem system) {
-            if (updatesCount >= _updates.Length - 1) Array.Resize(ref _updates, _updates.Length << 1);
-            _updates[updatesCount] = system;
-            updatesCount++;
+            if (_updatesCount >= _updates.Length - 1) Array.Resize(ref _updates, _updates.Length << 1);
+            system.OnCreate(_world);
+            _updates[_updatesCount] = system;
+            _updatesCount++;
         }
 
         public Systems AddReactive<T>() where T : class, IOnAdd, ISystem, new() {
             var t = new T();
             t.OnCreate(_world);
-            if (updatesCount >= _updates.Length - 1) Array.Resize(ref _updates, _updates.Length << 1);
-            _updates[updatesCount] = t;
-            updatesCount++;
+            if (_updatesCount >= _updates.Length - 1) Array.Resize(ref _updates, _updates.Length << 1);
+            _updates[_updatesCount] = t;
+            _updatesCount++;
             return this;
         }
 
@@ -436,14 +516,14 @@ namespace Wargon.Escape {
         }
 
         public void Update(float dt) {
-            for (var i = 0; i < updatesCount; i++) {
+            for (var i = 0; i < _updatesCount; i++) {
                 _updates[i].OnUpdate(dt);
                 _world.UpdateQueries();
             }
         }
 
         public sealed class Group {
-            private string _name;
+            private string Name;
             internal ISystem[] _systems;
             internal int count;
 
@@ -452,7 +532,7 @@ namespace Wargon.Escape {
             }
 
             public Group(string name) {
-                _name = name;
+                Name = name;
                 _systems = new ISystem[8];
             }
 
@@ -478,7 +558,7 @@ namespace Wargon.Escape {
         public int Index;
         internal byte WorldIndex;
     }
-
+    
     public static class EntityExtensions {
         public static ref T Get<T>(in this Entity entity) where T : struct, IComponent {
             var pool = World.Get(entity.WorldIndex).GetPool<T>();
@@ -514,24 +594,10 @@ namespace Wargon.Escape {
         }
 
         public static void Destroy(in this Entity entity) {
+            World.Get(entity.WorldIndex).GetPoolByIndex(0).Add(entity.Index);
+        }
+        public static void DestroyNow(in this Entity entity) {
             World.Get(entity.WorldIndex).OnDestroyEntity(in entity);
-        }
-    }
-
-    public class Archetype {
-        private ITurplePool<ITuple> _pool;
-        private int[] entities;
-        private Mask with;
-        private Mask without;
-
-        public static Archetype Build(params Type[] types) {
-            var archetype = new Archetype();
-            foreach (var type in types) archetype.with.Add(Component.GetIndex(type));
-            return new Archetype();
-        }
-
-        public ValueTuple<int, float> Get(int index) {
-            return (ValueTuple<int, float>)_pool.Get(entities[index]);
         }
     }
 }

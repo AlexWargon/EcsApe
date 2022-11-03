@@ -34,6 +34,7 @@
             selfIndex = lastWorldIndex;
             _worlds[selfIndex] = this;
             lastWorldIndex++;
+            GetPool<DestroyEntity>();
         }
 
         public static World Default {
@@ -46,12 +47,13 @@
                 return w;
             }
         }
-
-        public EntityManager EntityManager => new(this);
-
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ref World Get(byte index) {
             return ref _worlds[index];
         }
+        public EntityManager EntityManager => new(this);
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void AddDirtyQuery(Query query) {
             if (!query.IsDirty)
@@ -70,6 +72,10 @@
                 queriesCount++;
             }
             return q;
+        }
+
+        internal Query GetQueryInternal(int index) {
+            return queries[index];
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Entity CreateEntity() {
@@ -107,22 +113,24 @@
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public IPool<T> GetPool<T>() where T : struct, IComponent {
-            var info = Component<T>.AsRef();
-            var idx = info.index;
-            if (idx >= pools.Length - 1) Array.Resize(ref pools, idx << 1);
-            var pool = (IPool<T>)pools[idx];
-            if (pool == null) {
-                if (info.isTag || info.isSingleTone) pools[idx] = new TagPool<T>(256).AsIPool();
+            var idx = Component<T>.Index;
+            if (poolsCount <= idx) {
+                if (idx >= pools.Length - 1) Array.Resize(ref pools, idx << 1);
+                var info = Component<T>.AsRef();
+                if (info.isTag || info.isSingleTone || info.isEvent) pools[idx] = new TagPool<T>(256).AsIPool();
                 else pools[idx] = new Pool<T>(256).AsIPool();
-                pool = (IPool<T>)pools[idx];
                 poolsCount++;
             }
-
-            return pool;
+            return (IPool<T>)pools[idx];
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal IPool GetPoolByIndex(int index) {
-            return pools[index];
+        internal IPool GetPoolByIndex(int idx) {
+            if (poolsCount <= idx) {
+                if (idx >= pools.Length - 1) Array.Resize(ref pools, idx << 1);
+                pools[idx] = IPool.New(256, idx);
+                poolsCount++;
+            }
+            return pools[idx];
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void ChangeComponentsAmount(in Entity entity, sbyte add) {
