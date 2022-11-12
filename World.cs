@@ -1,4 +1,4 @@
-﻿namespace Wargon.Escape {
+﻿namespace Wargon.Ecsape {
     
     using System;
     using System.Collections.Generic;
@@ -9,13 +9,14 @@
         private static byte lastWorldIndex;
         
         private readonly DirtyQueries dirtyQueries;
-        private readonly Query[] queries;
+        
         private readonly List<int> freeEntities;
         private readonly byte selfIndex;
+        private Query [] queries;
+        private IPool [] pools;
         private Entity[] entities;
-        private sbyte[] entityComponentsAmounts;
+        private sbyte [] entityComponentsAmounts;
         private int lastEntity;
-        private IPool[] pools;
         private int poolsCount;
         private int queriesCount;
 
@@ -65,6 +66,9 @@
         }
 
         public Query GetQuery() {
+            if (queries.Length - 1 <= queriesCount) {
+                Array.Resize(ref queries, queriesCount+16);
+            }
             var q = queries[queriesCount];
             if (q == null) {
                 q = new Query(this);

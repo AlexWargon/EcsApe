@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using Unity.Collections.LowLevel.Unsafe;
 
-namespace Wargon.Escape {
+namespace Wargon.Ecsape {
     public class Query {
         internal World WorldInternal => _world;
         private readonly World _world;
@@ -27,6 +27,7 @@ namespace Wargon.Escape {
             count = 0;
         }
 
+        public World GetWorld() => _world;
         internal (int[], int[], EntityToUpdate[],int) GetRaw() {
             return (entities, entityMap, entityToUpdates, count);
         }

@@ -1,7 +1,7 @@
 ﻿using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 
-namespace Wargon.Escape {
+namespace Wargon.Ecsape {
     using System;
     using System.Runtime.CompilerServices;
     public static class Extensions {
