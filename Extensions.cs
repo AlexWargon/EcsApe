@@ -1,4 +1,5 @@
-﻿using Unity.Collections;
+﻿using System.Runtime.InteropServices;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 
 namespace Wargon.Ecsape {
@@ -6,7 +7,6 @@ namespace Wargon.Ecsape {
     using System.Runtime.CompilerServices;
     public static class Extensions {
 
-        
         public static T Last<T>(this System.Collections.Generic.List<T> list) {
             return list[^1];
         }
@@ -212,12 +212,32 @@ namespace Wargon.Ecsape {
         }
     }
 
-
     public struct NativeWrappedData<TT> where TT : unmanaged
     {
         [NativeDisableParallelForRestriction] public NativeArray<TT> Array;
 #if UNITY_EDITOR
         public AtomicSafetyHandle SafetyHandle;
 #endif
+    }
+    
+    public unsafe readonly struct NativeString {
+        private readonly char* letters;
+        public readonly int Lenght;
+        public NativeString(string source) {
+            letters = (char*)Marshal.AllocHGlobal(sizeof(char)*source.Length);
+            for (var i = 0; i < source.Length; i++) {
+                letters[i] = source[i];
+            }
+
+            Lenght = source.Length;
+        }
+
+        public override string ToString() {
+            var str = string.Empty;
+            for (int i = 0; i < Lenght; i++) {
+                str += letters[i];
+            }
+            return str;
+        }
     }
 }

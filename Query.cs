@@ -2,9 +2,57 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Unity.Collections.LowLevel.Unsafe;
 
 namespace Wargon.Ecsape {
+
+
+    public interface IQuery {
+        IQuery With<T>();
+        IQuery Without<T>();
+        IQuery With(Type type);
+        IQuery Without(Type type);
+    }
+    public class QueryWithOwner : Query {
+        public QueryWithOwner(World world) : base(world) { }
+    }
+
+    public static class QueryExtensions {
+        public static Query Without<T>(this Query query) where T : struct, IComponent {
+            var pool = query.WorldInternal.GetPool<T>();
+            query.without.Add(Component<T>.Index);
+            pool.OnAdd += query.OnRemoveWith;
+            pool.OnRemove += query.OnAddWith;
+            return query;
+        }
+        public static Query With<T>(this Query query) where T : struct, IComponent {
+            var pool = query.WorldInternal.GetPool<T>();
+            query.with.Add(Component<T>.Index);
+            pool.OnAdd += query.OnAddWith;
+            pool.OnRemove += query.OnRemoveWith;
+            return query;
+        }
+        
+        public static Query With(this Query query, Type type) {
+            var typeIndex = Component.GetIndex(type);
+            var pool = query.WorldInternal.GetPoolByIndex(typeIndex);
+            query.with.Add(typeIndex);
+            pool.OnAdd += query.OnAddWith;
+            pool.OnRemove += query.OnRemoveWith;
+            return query;
+        }
+
+        public static Query Aspect<T>(this Query query) where T: struct, IAspect {
+            T aspect = default;
+            var types = aspect.Link();
+            foreach (var type in types) {
+                query.With(type);
+            }
+            return query;
+        }
+    }
+
     public class Query {
         internal World WorldInternal => _world;
         private readonly World _world;
@@ -27,7 +75,6 @@ namespace Wargon.Ecsape {
             count = 0;
         }
 
-        public World GetWorld() => _world;
         internal (int[], int[], EntityToUpdate[],int) GetRaw() {
             return (entities, entityMap, entityToUpdates, count);
         }
@@ -39,7 +86,7 @@ namespace Wargon.Ecsape {
             get => count;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void OnAddWith(int entity) {
+        internal void OnAddWith(int entity) {
             if (entityToUpdates.Length <= entityToUpdateCount)
                 Array.Resize(ref entityToUpdates, entityToUpdateCount + 16);
             ref var e = ref entityToUpdates[entityToUpdateCount];
@@ -50,7 +97,7 @@ namespace Wargon.Ecsape {
             IsDirty = true;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void OnRemoveWith(int entity) {
+        internal void OnRemoveWith(int entity) {
             if (entityToUpdates.Length <= entityToUpdateCount)
                 Array.Resize(ref entityToUpdates, entityToUpdateCount + 16);
             ref var e = ref entityToUpdates[entityToUpdateCount];
@@ -76,26 +123,13 @@ namespace Wargon.Ecsape {
             pool.OnRemove += OnAddWith;
             return this;
         }
-        public Query Without<T>() where T : struct, IComponent {
-            var pool = _world.GetPool<T>();
-            without.Add(Component<T>.Index);
-            pool.OnAdd += OnRemoveWith;
-            pool.OnRemove += OnAddWith;
-            return this;
-        }
 
-        public Query With<T>() where T : struct, IComponent {
-            var pool = _world.GetPool<T>();
-            with.Add(Component<T>.Index);
-            pool.OnAdd += OnAddWith;
-            pool.OnRemove += OnRemoveWith;
-            return this;
-        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref Entity Entity(int index) {
             return ref _world.GetEntity(entities[index]);
         }
-        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void Remove(int entity) {
             if (!Has(entity)) return;
             var indx = entityMap[entity] - 1;
@@ -121,7 +155,7 @@ namespace Wargon.Ecsape {
             entities[count++] = entity;
             entityMap[entity] = count;
         }
-        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void Update() {
             for (var i = 0; i < entityToUpdateCount; i++) {
                 ref var e = ref entityToUpdates[i];
@@ -292,7 +326,7 @@ namespace Wargon.Ecsape {
         where T5 : struct, IComponent
         where T6 : struct, IComponent {
         
-        public Enumerator GetEnumerator() {
+        public new Enumerator GetEnumerator() {
             return new Enumerator(this, ref _chunk);
         }
         public readonly struct Chunk {
@@ -351,7 +385,8 @@ namespace Wargon.Ecsape {
             _chunk = new Chunk(world);
         }
     }
-
+    
+    [StructLayout(LayoutKind.Sequential)]
     internal struct Mask {
         public readonly int[] Types;
         public int Count;
