@@ -10,7 +10,7 @@ namespace Wargon.Ecsape
             if(linked) return;
             
             var entity = World.Default.CreateEntity();
-            entity.Add(new GameObjectSpawnedEvent{link = this});
+            entity.Add(new GameObjectSpawnedEvent{Link = this});
         }
 
         public void Link(ref Entity entity) {
@@ -66,18 +66,22 @@ namespace Wargon.Ecsape
         }
     }
 
-    struct GameObjectSpawnedEvent : IComponent {
-        public IMonoLink link;
+    internal struct GameObjectSpawnedEvent : IComponent {
+        public IMonoLink Link;
     }
     
     public sealed class ConvertEntitySystem : ISystem {
-        private Query gameObjects;
-        private IPool<GameObjectSpawnedEvent> pool;
+        private Query _gameObjects;
+        private IPool<GameObjectSpawnedEvent> _pool;
         
         public void OnCreate(World world) {
-            gameObjects = world.GetQuery().With<GameObjectSpawnedEvent>();
-            pool = world.GetPool<GameObjectSpawnedEvent>();
+            _gameObjects = world.GetQuery().With<GameObjectSpawnedEvent>();
+            _pool = world.GetPool<GameObjectSpawnedEvent>();
             
+            foreach (var monoLink in Object.FindObjectsOfType<EntityView>()) {
+                var e = world.CreateEntity();
+                monoLink.Link(ref e);
+            }
             foreach (var monoLink in Object.FindObjectsOfType<EntityLink>()) {
                 var e = world.CreateEntity();
                 monoLink.Link(ref e);
@@ -85,9 +89,9 @@ namespace Wargon.Ecsape
         }
         
         public void OnUpdate(float deltaTime) {
-            foreach (ref var entity in gameObjects) {
-                ref var go = ref pool.Get(ref entity);
-                go.link.Link(ref entity);
+            foreach (ref var entity in _gameObjects) {
+                ref var go = ref _pool.Get(ref entity);
+                go.Link.Link(ref entity);
                 entity.Remove<GameObjectSpawnedEvent>();
             }
         }

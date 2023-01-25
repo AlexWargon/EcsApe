@@ -1,6 +1,4 @@
-﻿using UnityEngine;
-
-namespace Wargon.Ecsape {
+﻿namespace Wargon.Ecsape {
     
     using System;
     using System.Collections.Generic;
@@ -11,7 +9,6 @@ namespace Wargon.Ecsape {
         private static byte lastWorldIndex;
         
         private readonly DirtyQueries dirtyQueries;
-        
         private readonly List<int> freeEntities;
         private readonly byte selfIndex;
         
@@ -26,6 +23,7 @@ namespace Wargon.Ecsape {
         private int poolSize = 256;
         private int poolsCount;
         private int queriesCount;
+        internal int QueriesCount => queriesCount;
         public int ActiveEntitiesCount => activeEntitiesCount;
         static World() {
             _worlds = new World[4];
@@ -109,7 +107,8 @@ namespace Wargon.Ecsape {
             }
             return q;
         }
-        
+
+        internal Query[] GetQueries() => queries; 
         public Query GetQuery<T>() where T : struct, IComponent {
             return GetQuery().With<T>();
         }

@@ -3,11 +3,149 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Unity.Collections.LowLevel.Unsafe;
 
 namespace Wargon.Ecsape {
 
+    public class Archetype
+    {
+        HashSet<int> mask;
+        List<int> entities;
+        List<Query> queries;
+        int queriesCount;
+        internal int Id;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Archetype(World world)
+        {
+            mask = new (10);
+            entities = new List<int>();
+            queries = new List<Query>(3);
+            var worldQueries = world.GetQueries();
 
+            var count = world.QueriesCount;
+            for (int i = 0; i < count; i++)
+            {
+                AddQuery(worldQueries[i]);
+            }
+            
+        }
+
+        public Archetype(World world, Archetype from, int component, bool add)
+        {
+            mask = new (10);
+            entities = new List<int>();
+            queries = new List<Query>(3);
+            
+            
+            if (from != null)
+            {
+                foreach (var i in @from.mask)
+                {
+                    mask.Add(i);
+                }
+            }
+
+            if (add) mask.Add(component);
+            else mask.Remove(component);
+            
+            var worldQueries = world.GetQueries();
+            var count = world.QueriesCount;
+            for (var i = 0; i < count; i++)
+            {
+                AddQuery(worldQueries[i]);
+            }
+        }
+
+        internal void AddComponent(int component)
+        {
+            mask.Add(component);
+        }
+        public void AddEntity(int entityId)
+        {
+            entities.Add(entityId);
+            for (var i = 0; i < queriesCount; i++)
+            {
+                queries[i].OnAddWith(entityId);
+            }
+            
+        }
+
+        public void RemoveEntity(int entityId)
+        {
+            entities.Remove(entityId);
+            for (var i = 0; i < queriesCount; i++)
+            {
+                queries[i].OnRemoveWith(entityId);
+            }
+        }
+        
+        public void AddQuery(Query query)
+        {
+            var checks = 0;
+            for (var q = 0; q < query.without.Types.Length; q++)
+            {
+                if(mask.Contains(query.without.Types[q]))
+                    return;
+            }
+            
+            for (var q = 0; q < query.without.Types.Length; q++)
+            {
+                if (mask.Contains(query.with.Types[q]))
+                {
+                    checks++;
+                    if(checks== query.with.Count)
+                        break;
+                }
+            }
+            queries.Add(query);
+        }
+        public override int GetHashCode()
+        {
+            return mask.GetHashCode();
+        }
+    }
+    
+    internal class Migrations
+    {
+        private readonly Dictionary<(int, int, bool), Archetype> _map;
+        private readonly Dictionary<int, Archetype> _archetypes;
+        private World _world;
+
+        internal Migrations(World world)
+        {
+            _map = new Dictionary<(int, int, bool), Archetype>();
+            _archetypes = new Dictionary<int, Archetype>();
+            _world = world;
+        }
+        public void Migrate(in Entity entity, int archetypeHashFrom, int componentType, bool add)
+        {
+            Boolean s = false;
+            (int,int,bool) migrationKey = (archetypeHashFrom, componentType,add);
+            if (archetypeHashFrom == 0)
+            {
+                
+            }
+            GetArchetype(archetypeHashFrom).RemoveEntity(entity.Index);
+        }
+
+        private Archetype GetMigration(int archetypeHashFrom, int componentType, bool add)
+        {
+            var key = (archetypeHashFrom, componenType: componentType,add);
+            if (_map.TryGetValue(key, out var archetype))
+                return archetype;
+            var newArchetype = new Archetype(_world, GetArchetype(archetypeHashFrom), componentType, add);
+            
+            return _map[key];
+        }
+        private Archetype GetArchetype(int archetypeId)
+        {
+            if (_archetypes.TryGetValue(archetypeId, out var archetype))
+                return archetype;
+            var newArchetype = new Archetype(_world);
+            _archetypes.Add(archetypeId, newArchetype);
+            return _archetypes[archetypeId];
+        }
+
+    }
     public interface IQuery {
         IQuery With<T>();
         IQuery Without<T>();
@@ -69,8 +207,8 @@ namespace Wargon.Ecsape {
             _world = world;
             entities = new int[256];
             entityMap = new int[256];
-            with = new Mask(10, world);
-            without = new Mask(4, world);
+            with = new Mask(10);
+            without = new Mask(4);
             entityToUpdates = new EntityToUpdate[256];
             count = 0;
         }
@@ -390,7 +528,8 @@ namespace Wargon.Ecsape {
     internal struct Mask {
         public readonly int[] Types;
         public int Count;
-        public Mask(int size, World world) {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Mask(int size) {
             Types = new int[size];
             Count = 0;
         }

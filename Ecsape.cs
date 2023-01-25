@@ -200,6 +200,13 @@ namespace Wargon.Ecsape {
         }
     }
 
+    public static class PoolsExt
+    {
+        public static void Sett<T>(this IPool pool, in T component, int entity)
+        {
+            pool.Add(entity);
+        }
+    }
     public interface IPool<T> : IPool where T : struct, IComponent {
         ref T Get(int entity);
         ref T Get(ref Entity entity);
@@ -477,6 +484,7 @@ namespace Wargon.Ecsape {
         }
 
         public void UpdateQueries() {
+            if(count < 1) return;
             for (var i = 0; i < count; i++) items[i].Update();
             count = 0;
         }
@@ -777,7 +785,7 @@ namespace Wargon.Ecsape {
 
     public static class EntityExtensions {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static World GetWorld(this in Entity entity) {
+        public static World GetWorld(in this Entity entity) {
             return World.Get(entity.WorldIndex);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -801,6 +809,13 @@ namespace Wargon.Ecsape {
         public static void Add<T>(in this Entity entity, in T component) where T : struct, IComponent {
             ref var world = ref World.Get(entity.WorldIndex);
             world.GetPool<T>().Add(in component, entity.Index);
+            world.ChangeComponentsAmount(in entity, +1);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static void AddBoxed(in this Entity entity, object component)
+        {
+            ref var world = ref World.Get(entity.WorldIndex);
+            world.GetPoolByIndex(Component.GetIndex(component.GetType())).AddBoxed(component, entity.Index);
             world.ChangeComponentsAmount(in entity, +1);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -849,18 +864,21 @@ namespace Wargon.Ecsape {
     public interface IDependencyContext {
         IDependencyContext From<T>() where T: class;
         IDependencyContext From<T>(T isntance) where T: class;
-        internal T Get<T>() where T : class;
         object GetInstance();
-        Type GetInstanceType();
-        Type GetAbstactType();
     }
+    public interface IDependencyContainer {
+        void Build(object target);
+        IDependencyContext Register<T>() where T: class;
+        IDependencyContext Register<T>(T item) where T: class;
+    }
+    
     public class DependencyContext : IDependencyContext {
         private object _instance;
         private Type _instanceType;
-        private Type abstractType;
 
         IDependencyContext IDependencyContext.From<T>(){
             _instanceType = typeof(T);
+            _instance = Activator.CreateInstance(typeof(T));
             return this;
         }
         IDependencyContext IDependencyContext.From<T>(T instance){
@@ -868,20 +886,10 @@ namespace Wargon.Ecsape {
             _instance = instance;
             return this;
         }
-        T IDependencyContext.Get<T>() {
-            return (T)_instance;
-        }
-
         public object GetInstance() {
             return _instance;
         }
 
-        public object Get() {
-            return _instance;
-        }
-        public Type GetInstanceType() => _instanceType;
-
-        public Type GetAbstactType()=> abstractType;
     }
 
     
@@ -895,12 +903,7 @@ namespace Wargon.Ecsape {
         }
         public static IDependencyContext Register<T>() where T : class => GetOrCreateContainer().Register<T>();
     }
-    public interface IDependencyContainer {
-        T Get<T>() where T: class;
-        void Build(object target);
-        IDependencyContext Register<T>() where T: class;
-        void SetContext(Type type, IDependencyContext context);
-    }
+
     public class DependencyContainer : IDependencyContainer {
         private readonly IDictionary<Type, IDependencyContext> constexts;
         
@@ -908,25 +911,17 @@ namespace Wargon.Ecsape {
             constexts = new Dictionary<Type, IDependencyContext>();
             Register<IDependencyContainer>().From(this);
         }
-        
-        public void SetContext(Type type, IDependencyContext context) {
-            constexts.Add(type, context);
-        }
-        
-        public T Get<T>() where T: class {
-            if (constexts.ContainsKey(typeof(T))){
-                return constexts[typeof(T)].Get<T>();
-            }
-
-            throw new NullReferenceException($"type {typeof(T)} not registred");
-        }
 
         public IDependencyContext Register<T>() where T: class {
             var context = new DependencyContext();
             constexts.Add(typeof(T), context);
             return context;
         }
-
+        public IDependencyContext Register<T>(T item) where T: class {
+            var context = new DependencyContext();
+            constexts.Add(typeof(T), context);
+            return context;
+        }
         public void Build(object instance){
             var type = instance.GetType();
             var fields = type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
