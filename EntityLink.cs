@@ -6,10 +6,11 @@ namespace Wargon.Ecsape
     public class EntityLink : MonoBehaviour, IMonoLink {
         private bool linked;
         [SerializeField] private ConvertOption option;
+        private Entity entity;
         private void Start() {
             if(linked) return;
             
-            var entity = World.Default.CreateEntity();
+            entity = World.Default.CreateEntity();
             entity.Add(new GameObjectSpawnedEvent{Link = this});
         }
 
@@ -34,6 +35,13 @@ namespace Wargon.Ecsape
                     break;
             }
             linked = true;
+        }
+
+        private void OnDestroy() {
+            if(option != ConvertOption.Destroy)
+                if (!entity.IsNull()) {
+                    entity.DestroyNow();
+                }
         }
     }
 
@@ -74,16 +82,16 @@ namespace Wargon.Ecsape
         private Query _gameObjects;
         private IPool<GameObjectSpawnedEvent> _pool;
         
-        public void OnCreate(World world) {
-            _gameObjects = world.GetQuery().With<GameObjectSpawnedEvent>();
-            _pool = world.GetPool<GameObjectSpawnedEvent>();
+        public void OnCreate(World worldSource) {
+            _gameObjects = worldSource.GetQuery().With<GameObjectSpawnedEvent>();
+            _pool = worldSource.GetPool<GameObjectSpawnedEvent>();
             
             foreach (var monoLink in Object.FindObjectsOfType<EntityView>()) {
-                var e = world.CreateEntity();
+                var e = worldSource.CreateEntity();
                 monoLink.Link(ref e);
             }
             foreach (var monoLink in Object.FindObjectsOfType<EntityLink>()) {
-                var e = world.CreateEntity();
+                var e = worldSource.CreateEntity();
                 monoLink.Link(ref e);
             }
         }

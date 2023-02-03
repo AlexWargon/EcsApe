@@ -1,78 +1,63 @@
-﻿namespace Wargon.Ecsape {
+﻿using UnityEngine;
+
+namespace Wargon.Ecsape {
     
     using System;
     using System.Collections.Generic;
     using System.Runtime.CompilerServices;
     
-    public class World {
-        private static readonly World[] _worlds;
+    public partial class World {
+        private static readonly World[] worlds;
         private static byte lastWorldIndex;
         
         private readonly DirtyQueries dirtyQueries;
         private readonly List<int> freeEntities;
         private readonly byte selfIndex;
+        internal byte Index => selfIndex;
         
         private Query [] queries;
         private IPool [] pools;
+        private int[] poolKeys;
         private Entity[] entities;
         private sbyte [] entityComponentsAmounts;
-        private int[] poolKeys;
-        
+        private int[] archetypeIDs;
         private int lastEntity;
         private int activeEntitiesCount;
-        private int poolSize = 256;
+        private int poolSize;
         private int poolsCount;
         private int queriesCount;
         internal int QueriesCount => queriesCount;
         public int ActiveEntitiesCount => activeEntitiesCount;
         static World() {
-            _worlds = new World[4];
+            worlds = new World[4];
             lastWorldIndex = 0;
         }
 
-        public World() {
+        private World(string name) {
+            poolSize = ENTITIES_CACHE;
             pools = new IPool[64];
             poolKeys = new int[64];
-            entities = new Entity[256];
+            entities = new Entity[ENTITIES_CACHE];
             freeEntities = new List<int>(64);
             queries = new Query[32];
             dirtyQueries = new DirtyQueries(16);
-            entityComponentsAmounts = new sbyte[256];
+            entityComponentsAmounts = new sbyte[ENTITIES_CACHE];
+            archetypeIDs = new int[ENTITIES_CACHE];
+            migrations = new Migrations(this);
             selfIndex = lastWorldIndex;
-            _worlds[selfIndex] = this;
+            worlds[selfIndex] = this;
             lastWorldIndex++;
+            
             GetPool<DestroyEntity>();
-            Worlds.Add("", selfIndex);
-        }
-        public World(string name) {
-            pools = new IPool[64];
-            poolKeys = new int[64];
-            entities = new Entity[256];
-            freeEntities = new List<int>(64);
-            queries = new Query[32];
-            dirtyQueries = new DirtyQueries(16);
-            entityComponentsAmounts = new sbyte[256];
-            selfIndex = lastWorldIndex;
-            _worlds[selfIndex] = this;
-            lastWorldIndex++;
-            GetPool<DestroyEntity>();
-            Worlds.Add(name, selfIndex);
         }
         public static World Default {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get {
-                // var w = _worlds[0];
-                // if (w != null) return w;
-                // w = new World();
-                // _worlds[0] = w;
-                // return w;
-                return Worlds.Get(Worlds.Default);
-            }
+            get => Get(DefaultIndex);
         }
         
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static ref World Get(byte index) {
-            return ref _worlds[index];
+        public static ref World Get(byte index) {
+            return ref worlds[index];
         }
 
         public EntityManager EntityManager => new(this);
@@ -153,6 +138,7 @@
                 for (var i = 0; i < poolsCount; i++) pools[i].Resize(poolSize);
                 Array.Resize(ref entities, poolSize);
                 Array.Resize(ref entityComponentsAmounts, poolSize);
+                Array.Resize(ref archetypeIDs, poolSize);
             }
             entity.Index = lastEntity;
             entity.WorldIndex = selfIndex;
@@ -168,13 +154,19 @@
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void OnDestroyEntity(in Entity entity) {
+            var index = entity.Index;
             for (var i = 0; i < poolsCount; i++) {
                 ref var pool = ref pools[i];
-                if (pool.Has(entity.Index))
-                    pool.Remove(entity.Index);
+                if (pool.Has(index))
+                    pool.Remove(index);
             }
-            freeEntities.Add(entity.Index);
-            entityComponentsAmounts[entity.Index] = 0;
+            
+            ref var archetype = ref GetArchetypeId(index);
+            migrations.GetArchetype(archetype).RemoveEntity(index);
+
+            archetype = 0;
+            freeEntities.Add(index);
+            entityComponentsAmounts[index] = 0;
             activeEntitiesCount--;
         }
 
@@ -183,7 +175,7 @@
             if (idx >= poolKeys.Length - 1) Array.Resize(ref poolKeys, idx + 4);
             if (poolsCount >= pools.Length - 1) Array.Resize(ref pools, idx + 4);
             poolKeys[idx] = poolsCount;
-            var pool = IPool.New(256, idx);
+            var pool = IPool.New(ENTITIES_CACHE, idx);
             pools[poolsCount] = pool;
             poolsCount++;
         }
@@ -231,43 +223,102 @@
             return pools[poolKeys[idx]];
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void ChangeComponentsAmount(in Entity entity, sbyte add) {
+        internal ref sbyte ChangeComponentsAmount(in Entity entity, sbyte add) {
             ref var componentsAmount = ref entityComponentsAmounts[entity.Index];
             componentsAmount += add;
-            if (componentsAmount == 0) OnDestroyEntity(in entity);
+            return ref componentsAmount;
         }
 
         internal sbyte GetComponentAmount(in Entity entity) {
             return entityComponentsAmounts[entity.Index];
         }
-    }
 
-    public ref partial struct Worlds {
-        public const string Default = "Default";
-    }
-    
-    public ref partial struct Worlds {
-        private static readonly Dictionary<string, byte> ids = new Dictionary<string, byte>();
-        public const string Tween = "Tweens";
+
+        private readonly Migrations migrations;
         
-        public static World Get(string name) {
-            if (ids.TryGetValue(name, out var index))
-                return World.Get(index);
-            var world = new World(name);
-            return world;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void MigrateEntity(int entity, ref int archetypeFrom, int componentType, bool  add) {
+            migrations.Migrate(entity, ref archetypeFrom, ref componentType, ref add);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void MigrateEntityGeneric<T>(int entity, int archetypeFrom, bool add) where T : struct, IComponent{
+            migrations.MigrateGeneric<T>(entity, archetypeFrom, add);
         }
         
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal ref int GetArchetypeId(int entity) {
+            return ref archetypeIDs[entity];
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void SetArchetype(int entity, int newArchetype) {
+            archetypeIDs[entity] = newArchetype;
+        }
+
+        public int ArchetypesCountInternal() => migrations.ArchetypesCount;
+    }
+
+    public partial class World {
+        public const string DEFAULT = "Default";
+        public static int ENTITIES_CACHE = 256;
+        
+        private static readonly Dictionary<string, byte> ids = new();
+        private static byte defaultIndex = 255;
+        internal static byte DefaultIndex {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get {
+                if (defaultIndex == 255) {
+                    defaultIndex = GetOrCreate(DEFAULT).Index;
+                }
+                return defaultIndex;
+            }
+        }
+        public static World GetOrCreate(string name) {
+            name ??= DEFAULT;
+            if (ids.TryGetValue(name, out var index))
+                return Get(index);
+            
+            var world = new World(name);
+            ids.Add(name, world.Index);
+            Debug.Log($"World {name} was not existed but created");
+            return world;
+        }
+        public static World GetOrCreate() {
+            if (ids.TryGetValue(DEFAULT, out var index))
+                return Get(index);
+            var world = new World(DEFAULT);
+            ids.Add(DEFAULT, world.Index);
+            Debug.Log($"World {DEFAULT} was not existed but created");
+            return world;
+        }
         internal static void Add(string name, byte index) {
             if(ids.ContainsKey(name)) return;
             ids.Add(name,index);
         }
     }
     
-    public readonly ref struct EntityManager {
+    public partial class World {
+        
+        public const string TWEEN = "Tweens";
+        
+        private static byte tweenIndex = 255;
+        public static byte TweenIndex {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get {
+                if (tweenIndex == 255) {
+                    tweenIndex = GetOrCreate(TWEEN).Index;
+                }
+                return tweenIndex;
+            }
+        }
+
+    }
+    
+    public struct EntityManager {
         private readonly World _world;
 
         public EntityManager(World world) {
             _world = world;
+
         }
 
         public Entity CreateEntity() {
