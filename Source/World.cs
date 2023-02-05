@@ -11,7 +11,7 @@ namespace Wargon.Ecsape {
         private static byte lastWorldIndex;
         
         private readonly DirtyQueries dirtyQueries;
-        private readonly List<int> freeEntities;
+        private readonly ArrayList<int> freeEntities;
         private readonly byte selfIndex;
         internal byte Index => selfIndex;
         
@@ -38,7 +38,7 @@ namespace Wargon.Ecsape {
             pools = new IPool[64];
             poolKeys = new int[64];
             entities = new Entity[ENTITIES_CACHE];
-            freeEntities = new List<int>(64);
+            freeEntities = new ArrayList<int>(64);
             queries = new Query[32];
             dirtyQueries = new DirtyQueries(16);
             entityComponentsAmounts = new sbyte[ENTITIES_CACHE];
@@ -155,21 +155,26 @@ namespace Wargon.Ecsape {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void OnDestroyEntity(in Entity entity) {
             var index = entity.Index;
-            for (var i = 0; i < poolsCount; i++) {
-                ref var pool = ref pools[i];
-                if (pool.Has(index))
-                    pool.Remove(index);
-            }
-            
             ref var archetype = ref GetArchetypeId(index);
-            migrations.GetArchetype(archetype).RemoveEntity(index);
-
+            var archetypeRef = migrations.GetArchetype(archetype);
+            archetypeRef.RemoveEntity(index);
+            archetypeRef.RemoveEntityFromPools(this, index);
             archetype = 0;
             freeEntities.Add(index);
             entityComponentsAmounts[index] = 0;
             activeEntitiesCount--;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void OnDestroyEntity(in Entity entity, ref sbyte componentsAmount) {
+            var index = entity.Index;
+            ref var archetype = ref GetArchetypeId(index);
+            var archetypeRef = migrations.GetArchetype(archetype);
+            archetypeRef.RemoveEntity(index);
+            archetype = 0;
+            freeEntities.Add(index);
+            componentsAmount = 0;
+            activeEntitiesCount--;
+        }
         public void CreatePool<T>() where T : struct, IComponent {
             var idx = Component<T>.Index;
             if (idx >= poolKeys.Length - 1) Array.Resize(ref poolKeys, idx + 4);
@@ -192,27 +197,9 @@ namespace Wargon.Ecsape {
             }
 
             return (IPool<T>)pools[poolKeys[idx]];
-            // if (poolsCount <= idx) {
-            //     if (idx >= pools.Length - 1) Array.Resize(ref pools, idx << 1);
-            //     // var info = Component<T>.AsRef();
-            //     // if (info.isTag || info.isSingleTone || info.isEvent) pools[idx] = new TagPool<T>(256).AsIPool();
-            //     // else if (info.isSelfNew) pools[idx] = new ClearPool<T>(256).AsIPool();
-            //     // else pools[idx] = new Pool<T>(256).AsIPool();
-            //     // poolsCount++;
-            //     
-            //     pools[idx] = IPool.New(256, idx);
-            //     poolsCount++;
-            // }
-            // return (IPool<T>)pools[idx];
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal IPool GetPoolByIndex(int idx) {
-            // if (poolsCount <= idx) {
-            //     if (idx >= pools.Length - 1) Array.Resize(ref pools, idx << 1);
-            //     pools[idx] = IPool.New(256, idx);
-            //     poolsCount++;
-            // }
-            // return pools[idx];
             if (idx >= poolKeys.Length - 1) Array.Resize(ref poolKeys, idx + 4);
             if (poolKeys[idx] == 0) {
                 if (poolsCount >= pools.Length - 1) Array.Resize(ref pools, idx + 4);
@@ -233,18 +220,13 @@ namespace Wargon.Ecsape {
             return entityComponentsAmounts[entity.Index];
         }
 
-
         private readonly Migrations migrations;
         
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void MigrateEntity(int entity, ref int archetypeFrom, int componentType, bool  add) {
-            migrations.Migrate(entity, ref archetypeFrom, ref componentType, ref add);
+        internal void MigrateEntity(int entity, ref int archetype, int componentType, bool add) {
+            migrations.Migrate(entity, ref archetype, ref componentType, ref add);
         }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void MigrateEntityGeneric<T>(int entity, int archetypeFrom, bool add) where T : struct, IComponent{
-            migrations.MigrateGeneric<T>(entity, archetypeFrom, add);
-        }
-        
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal ref int GetArchetypeId(int entity) {
             return ref archetypeIDs[entity];
@@ -253,8 +235,9 @@ namespace Wargon.Ecsape {
         internal void SetArchetype(int entity, int newArchetype) {
             archetypeIDs[entity] = newArchetype;
         }
-
+        
         public int ArchetypesCountInternal() => migrations.ArchetypesCount;
+        public List<Archetype> ArchetypesInternal() => migrations.Archetypes;
     }
 
     public partial class World {
@@ -263,7 +246,8 @@ namespace Wargon.Ecsape {
         
         private static readonly Dictionary<string, byte> ids = new();
         private static byte defaultIndex = 255;
-        internal static byte DefaultIndex {
+
+        private static byte DefaultIndex {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get {
                 if (defaultIndex == 255) {
@@ -313,12 +297,11 @@ namespace Wargon.Ecsape {
 
     }
     
-    public struct EntityManager {
+    public readonly struct EntityManager {
         private readonly World _world;
 
         public EntityManager(World world) {
             _world = world;
-
         }
 
         public Entity CreateEntity() {

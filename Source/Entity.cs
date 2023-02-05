@@ -1,11 +1,20 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Wargon.Ecsape {
     [StructLayout(LayoutKind.Sequential)]
-    public struct Entity {
+    public struct Entity : IEquatable<Entity> {
         public int Index;
         internal byte WorldIndex;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool Equals(Entity other) {
+            return Index == other.Index && WorldIndex == other.WorldIndex;
+        }
+
+        public override int GetHashCode() {
+            return Index;
+        }
     }
     
     public static class EntityExtensions {
@@ -21,9 +30,12 @@ namespace Wargon.Ecsape {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ref T Get<T>(in this Entity entity) where T : struct, IComponent {
-            var pool = World.Get(entity.WorldIndex).GetPool<T>();
+            ref var world = ref World.Get(entity.WorldIndex);
+            var pool = world.GetPool<T>();
             if (pool.Has(entity.Index)) return ref pool.Get(entity.Index);
-            entity.Add<T>();
+            pool.Add(entity.Index);
+            world.MigrateEntity(entity.Index, ref world.GetArchetypeId(entity.Index), pool.Info.Index, true);
+            world.ChangeComponentsAmount(in entity, +1);
             return ref pool.Get(entity.Index);
         }
 
@@ -55,12 +67,13 @@ namespace Wargon.Ecsape {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Remove<T>(in this Entity entity) where T : struct, IComponent {
             ref var world = ref World.Get(entity.WorldIndex);
-            world.GetPoolByIndex(Component<T>.Index).Remove(entity.Index);
+            var index = Component<T>.Index;
+            world.GetPoolByIndex(index).Remove(entity.Index);
             ref var componentsAmount = ref world.ChangeComponentsAmount(in entity, -1);
             if(componentsAmount != 0)
-                world.MigrateEntity(entity.Index, ref world.GetArchetypeId(entity.Index), Component<T>.Index, false);
+                world.MigrateEntity(entity.Index, ref world.GetArchetypeId(entity.Index), index, false);
             else
-                world.OnDestroyEntity(in entity);
+                world.OnDestroyEntity(in entity, ref componentsAmount);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

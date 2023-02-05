@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using UnityEngine;
 
 namespace Wargon.Ecsape {
     public interface INew {
@@ -18,7 +17,7 @@ namespace Wargon.Ecsape {
 
     public interface IClearOnEndOfFrame { }
 
-    public readonly ref struct Component<T> where T : struct, IComponent {
+    public readonly struct Component<T> where T : struct, IComponent {
         public static readonly int Index;
         public static readonly Type Type;
         public static readonly bool IsSingleTone;
@@ -193,7 +192,6 @@ namespace Wargon.Ecsape {
     public interface IPool {
         int Count { get; }
         ComponentInfo Info { get; }
-        
         void Add(int entity);
         void AddBoxed(object component, int entity);
         void Remove(int entity);
@@ -328,7 +326,6 @@ namespace Wargon.Ecsape {
 
         public void Add(in T component, int entity) {
             if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
-            if (entities.Length - 1 < entity) Debug.Log($"entities.Length {entities.Length} entity {entity}");
             entities[entity] = count;
             data[count] = component;
             count++;
@@ -520,10 +517,11 @@ namespace Wargon.Ecsape {
             }
         }
     }
+    public interface IEventSystem{}
     /// <summary>
     ///     Event will be cleared before this system
     /// </summary>
-    public interface IEventSystem<T> where T : struct, IComponent { }
+    public interface IEventSystem<T> : IEventSystem where T : struct, IComponent { }
     /// <summary>
     ///     Execute every frame
     /// </summary>
@@ -533,19 +531,20 @@ namespace Wargon.Ecsape {
     }
 
     internal sealed class ClearEventsSystem<T> : ISystem where T : struct, IComponent {
-        private TagPool<T> pool;
+        private IPool<T> pool;
         private Query query;
 
         public void OnCreate(World worldSource) {
-            pool = (TagPool<T>) worldSource.GetPool<T>();
             query = worldSource.GetQuery().With<T>();
         }
 
         public void OnUpdate(float deltaTime) {
-            if (!query.IsEmpty)
-                foreach (var entity in query) {
-                    pool.Remove(entity.Index);
-                }
+            if (query.IsEmpty) return;
+            //Debug.Log($"{typeof(T).Name} cleared {pool.Count} times");
+            foreach (ref var entity in query) {
+                //pool.Remove(entity.Index);
+                entity.Remove<T>();
+            }
         }
     }
 
@@ -633,11 +632,36 @@ namespace Wargon.Ecsape {
             defaultSystems = new DefaultSystems();
         }
 
+        private bool IsEventSystem<T>(T system) where T : ISystem {
+            return system.GetType().GetInterface(nameof(IEventSystem)) != null;
+        }
+
+        private void IfIsEventSystemAddClearSystem<T>(T eventSystem) where T: ISystem {
+            if (IsEventSystem(eventSystem)) {
+                var type = GetGenericType(eventSystem.GetType(), typeof(IEventSystem<>));
+                AddSystem(CreateClearEventSystem(type));
+            }
+        }
+                
+        private static Type GetGenericType(Type system, Type @interface) {
+            foreach(var type in system.GetInterfaces()) {
+                if(type.IsGenericType && type.GetGenericTypeDefinition() == @interface) {
+                    return type.GetGenericArguments()[0];
+                }
+            }
+
+            return null;
+        }
+        
+        private static ISystem CreateClearEventSystem(Type eventType) {
+            return (ISystem) Generic.New(typeof(ClearEventsSystem<>), eventType, null);
+        }
+
         public Systems AddInjector(IDependencyContainer container) {
             dependencyContainer = container;
             return this;
         }
-
+        
         private void InitDependencies() {
             if (dependencyContainer != null)
                 foreach (var i in updatesCount) {
@@ -667,6 +691,7 @@ namespace Wargon.Ecsape {
             foreach (var group in groups)
                 for (var i = 0; i < group.count; i++) {
                     var s = group.systems[i];
+                    IfIsEventSystemAddClearSystem(s);
                     AddSystem(s);
                 }
 
@@ -693,12 +718,14 @@ namespace Wargon.Ecsape {
         }
 
         public Systems Add<T>() where T : class, ISystem, new() {
-            var t = new T();
-            AddSystem(t);
+            var system = new T();
+            IfIsEventSystemAddClearSystem(system);
+            AddSystem(system);
             return this;
         }
 
         public Systems Add<T>(T system) where T : class, ISystem {
+            IfIsEventSystemAddClearSystem(system);
             AddSystem(system);
             return this;
         }
@@ -722,7 +749,7 @@ namespace Wargon.Ecsape {
 
         public Systems Add(Group group) {
             groups.Add(group);
-            Debug.Log($"group {group.Name} Added");
+            //Debug.Log($"group {group.Name} Added");
             return this;
         }
 
@@ -767,9 +794,9 @@ namespace Wargon.Ecsape {
 
     [Serializable]
     public struct Translation : IComponent {
-        public Vector3 position;
-        public Quaternion rotation;
-        public Vector3 scale;
+        public UnityEngine.Vector3 position;
+        public UnityEngine.Quaternion rotation;
+        public UnityEngine.Vector3 scale;
     }
 
     public struct StaticTag : IComponent { }
@@ -963,6 +990,15 @@ namespace Wargon.Ecsape {
                 ptr = Resize(ptr, capacity, capacity * 2);
                 capacity *= 2;
             }
+        }
+    }
+
+    internal static class Debug {
+        internal static void Log(object massage) {
+            UnityEngine.Debug.Log(massage);
+        }
+        internal static void LogError(object massage) {
+            UnityEngine.Debug.LogError(massage);
         }
     }
 }

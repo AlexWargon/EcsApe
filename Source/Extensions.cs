@@ -220,7 +220,7 @@ namespace Wargon.Ecsape {
 #endif
     }
     
-    public unsafe readonly struct NativeString {
+    public readonly unsafe struct NativeString {
         private readonly char* letters;
         public readonly int Lenght;
         public NativeString(string source) {
