@@ -1,6 +1,4 @@
-﻿using UnityEngine;
-
-namespace Wargon.Ecsape {
+﻿namespace Wargon.Ecsape {
     
     using System;
     using System.Collections.Generic;
@@ -159,6 +157,7 @@ namespace Wargon.Ecsape {
             var archetypeRef = migrations.GetArchetype(archetype);
             archetypeRef.RemoveEntity(index);
             archetypeRef.RemoveEntityFromPools(this, index);
+            
             archetype = 0;
             freeEntities.Add(index);
             entityComponentsAmounts[index] = 0;
@@ -170,6 +169,7 @@ namespace Wargon.Ecsape {
             ref var archetype = ref GetArchetypeId(index);
             var archetypeRef = migrations.GetArchetype(archetype);
             archetypeRef.RemoveEntity(index);
+
             archetype = 0;
             freeEntities.Add(index);
             componentsAmount = 0;
@@ -216,8 +216,8 @@ namespace Wargon.Ecsape {
             return ref componentsAmount;
         }
 
-        internal sbyte GetComponentAmount(in Entity entity) {
-            return entityComponentsAmounts[entity.Index];
+        internal ref sbyte GetComponentAmount(in Entity entity) {
+            return ref entityComponentsAmounts[entity.Index];
         }
 
         private readonly Migrations migrations;
@@ -232,12 +232,22 @@ namespace Wargon.Ecsape {
             return ref archetypeIDs[entity];
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void SetArchetype(int entity, int newArchetype) {
-            archetypeIDs[entity] = newArchetype;
+        public Archetype GetArchetype(params Type[] components) {
+            return migrations.GetOrCreateArchetype(components);
         }
-        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Archetype GetArchetype(params int[] components) {
+            return migrations.GetOrCreateArchetype(components);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Archetype GetArchetype(Span<int> span) {
+            return migrations.GetOrCreateArchetype(ref span);
+        }
         public int ArchetypesCountInternal() => migrations.ArchetypesCount;
         public List<Archetype> ArchetypesInternal() => migrations.Archetypes;
+        public IPool[] PoolsInternal() => pools;
+        public int PoolsCountInternal() => poolsCount;
+        public List<Migrations.Migration> MigrationsInternal() => migrations.GetMigrations();
     }
 
     public partial class World {

@@ -42,21 +42,25 @@ namespace Wargon.Ecsape {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Add<T>(in this Entity entity) where T : struct, IComponent {
             ref var world = ref World.Get(entity.WorldIndex);
-            world.GetPoolByIndex(Component<T>.Index).Add(entity.Index);
-            world.MigrateEntity(entity.Index, ref world.GetArchetypeId(entity.Index), Component<T>.Index, true);
+            var pool = world.GetPoolByIndex(Component<T>.Index);
+            if(pool.Has(entity.Index)) return;
+            pool.Add(entity.Index);
+            world.MigrateEntity(entity.Index, ref world.GetArchetypeId(entity.Index), pool.Info.Index, true);
             world.ChangeComponentsAmount(in entity, +1);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Add<T>(in this Entity entity, in T component) where T : struct, IComponent {
             ref var world = ref World.Get(entity.WorldIndex);
-            world.GetPool<T>().Add(in component, entity.Index);
-            world.MigrateEntity(entity.Index, ref world.GetArchetypeId(entity.Index), Component<T>.Index, true);
+            var pool = world.GetPool<T>();
+            if(pool.Has(entity.Index)) return;
+            pool.Add(in component, entity.Index);
+            world.MigrateEntity(entity.Index, ref world.GetArchetypeId(entity.Index), pool.Info.Index, true);
             world.ChangeComponentsAmount(in entity, +1);
         }
         
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static void AddBoxed(in this Entity entity, object component) {
+        public static void AddBoxed(in this Entity entity, object component) {
             ref var world = ref World.Get(entity.WorldIndex);
             var idx = Component.GetIndex(component.GetType());
             world.GetPoolByIndex(idx).AddBoxed(component, entity.Index);

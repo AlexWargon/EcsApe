@@ -1,6 +1,6 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -48,28 +48,43 @@ namespace Wargon.Ecsape {
         internal readonly HashSet<int> mask;
         private readonly Mask maskArray;
         internal readonly ArrayList<Query> queries;
-        private int withCount;
-
+        private int queriesCount;
+        private readonly byte worldIndex;
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Archetype() {
             mask = new HashSet<int>();
             queries = new ArrayList<Query>(3);
             maskArray = new Mask(mask);
             id = 0;
-            withCount = 0;
+            queriesCount = 0;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal Archetype(World world, HashSet<int> maskSource, int archetypeId) {
             queries = new ArrayList<Query>(10);
             id = archetypeId;
-            withCount = 0;
+            queriesCount = 0;
             mask = maskSource;
             maskArray = new Mask(mask);
+            worldIndex = world.Index;
             var worldQueries = world.GetQueries();
             var count = world.QueriesCount;
             for (var i = 0; i < count; i++) AddQuery(worldQueries[i]);
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal Archetype(World world, ref Span<int> maskSource, int archetypeId) {
+            queries = new ArrayList<Query>(10);
+            id = archetypeId;
+            queriesCount = 0;
+            mask = new HashSet<int>();
+            foreach (var i in maskSource) {
+                mask.Add(i);
+            }
+            maskArray = new Mask(mask);
+            worldIndex = world.Index;
+            var worldQueries = world.GetQueries();
+            var count = world.QueriesCount;
+            for (var i = 0; i < count; i++) AddQuery(worldQueries[i]);
+        }
         public static Archetype Empty => new();
 
         public override string ToString() {
@@ -82,13 +97,13 @@ namespace Wargon.Ecsape {
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void AddEntity(int entityId) {
-            for (var i = 0; i < withCount; i++) queries[i].OnAddWith(entityId);
+        private void AddEntity(int entityId) {
+            for (var i = 0; i < queriesCount; i++) queries[i].OnAddWith(entityId);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void RemoveEntity(int entityId) {
-            for (var i = 0; i < withCount; i++) queries[i].OnRemoveWith(entityId);
+            for (var i = 0; i < queriesCount; i++) queries[i].OnRemoveWith(entityId);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -104,7 +119,7 @@ namespace Wargon.Ecsape {
                     checks++;
                     if (checks == query.with.Count) {
                         queries.Add(query);
-                        withCount++;
+                        queriesCount++;
                         break;
                     }
                 }
@@ -112,22 +127,57 @@ namespace Wargon.Ecsape {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void RemoveEntityFromPools(World world, int entity) {
-            for (var i = maskArray.Count - 1; i >= 0; i--) {
+            for (var i = 0; i < maskArray.Count; i++) {
                 var pool = world.GetPoolByIndex(maskArray.Types[i]);
                 if(pool.Has(entity))
                     pool.Remove(entity);
             }
         }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Entity CreateEntity() {
+            var world = World.Get(worldIndex);
+            var e = world.CreateEntity();
+            ref var componentsAmount = ref world.GetComponentAmount(in e);
+            ref var archetype = ref world.GetArchetypeId(e.Index);
+            for (var i = 0; i < maskArray.Count; i++) {
+                world.GetPoolByIndex(maskArray.Types[i]).Add(e.Index);
+                componentsAmount++;
+            }
+            archetype = id;
+            AddEntity(e.Index);
+            return e;
+        }
     }
 
+    public unsafe struct FastArray<T> : IDisposable  where T : unmanaged {
+        private T* buffer;
+        private int count;
+        private int capacity;
+        
+        internal FastArray(int size) {
+            count = 0;
+            buffer = (T*)Marshal.AllocCoTaskMem(sizeof(T) * size);
+            capacity = size;
+        }
 
+        public void Dispose() {
+            Marshal.FreeCoTaskMem((IntPtr)buffer);
+        }
+        public void Add(T item) {
+            if (capacity - 1 <= count) {
+                buffer = UnsafeHelp.Resize(buffer, capacity, capacity * 2);
+                capacity *= 2;
+            }
+            buffer[count++] = item;
+        }
 
-    internal class Migrations {
+        public Span<T> ToSpan() => new (buffer, count);
+    }
+    public class Migrations {
         private readonly Dictionary<int, Archetype> archetypes;
         private readonly Dictionary<MigrationID, Migration> cachedMigrations;
         private readonly World world;
         private MigrationID currentMigrationID;
-
         internal Migrations(World worldSource) {
             archetypes = new Dictionary<int, Archetype> {{0, Archetype.Empty}};
             Archetypes = new List<Archetype>();
@@ -136,29 +186,55 @@ namespace Wargon.Ecsape {
             ArchetypesCount = 0;
         }
 
+        
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal Archetype GetArchetype(int id) {
             return archetypes[id];
         }
-        internal Archetype GetOrCreateArchetype(params Type[] types) {
-            var mask = new HashSet<int>();
-            foreach (var type in types) {
-                mask.Add(Component.GetIndex(type));
-            }
-            var id = GetCustomHashCode(mask);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal Archetype GetOrCreateArchetype(ref Span<int> types) {
+            var id = GetCustomHashCode(ref types);
             if (!archetypes.ContainsKey(id)) {
+                var newArchetype = new Archetype(world, ref types, id);
+                archetypes.Add(id, newArchetype);
+                Archetypes.Add(newArchetype);
+            }
+            return archetypes[id];
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal Archetype GetOrCreateArchetype(params int[] types) {
+            var id = GetCustomHashCode(ref types);
+            if (!archetypes.ContainsKey(id)) {
+                var mask = new HashSet<int>(types);
                 var newArchetype = new Archetype(world, mask, id);
                 archetypes.Add(id, newArchetype);
+                Archetypes.Add(newArchetype);
+            }
+
+            return archetypes[id];
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal Archetype GetOrCreateArchetype(params Type[] types) {
+            Span<int> typesSpan = stackalloc int[types.Length];
+
+            for (int i = 0; i < typesSpan.Length; i++) {
+                typesSpan[i] = Component.GetIndex(types[i]);
+            }
+            var id = GetCustomHashCode(ref typesSpan);
+            if (!archetypes.ContainsKey(id)) {
+                var newArchetype = new Archetype(world, ref typesSpan, id);
+                archetypes.Add(id, newArchetype);
+                Archetypes.Add(newArchetype);
             }
 
             return archetypes[id];
         }
         public List<Archetype> Archetypes { get; }
-        
+        public List<Migration> GetMigrations() => cachedMigrations.Values.ToList();
         internal int ArchetypesCount { get; private set; }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int GetCustomHashCode(HashSet<int> mask) {
+        private static int GetCustomHashCode(HashSet<int> mask) {
             unchecked {
                 const int p = 16777619;
                 var hash = (int) 2166136261;
@@ -172,7 +248,43 @@ namespace Wargon.Ecsape {
                 return hash;
             }
         }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int GetCustomHashCode(ref Span<int> mask) {
+            unchecked {
+                const int p = 16777619;
+                var hash = (int) 2166136261;
 
+                for (var index = 0; index < mask.Length; index++) {
+                    ref var i = ref mask[index];
+                    hash = (hash ^ i) * p;
+                }
+
+                hash += hash << 13;
+                hash ^= hash >> 7;
+                hash += hash << 3;
+                hash ^= hash >> 17;
+                hash += hash << 5;
+                return hash;
+            }
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int GetCustomHashCode(ref int[] mask) {
+            unchecked {
+                const int p = 16777619;
+                var hash = (int) 2166136261;
+
+                var s = mask.Length;
+                for (var i = 0; i < s; i++) {
+                    hash = (hash ^ mask[i]) * p;
+                }
+                hash += hash << 13;
+                hash ^= hash >> 7;
+                hash += hash << 3;
+                hash ^= hash >> 17;
+                hash += hash << 5;
+                return hash;
+            }
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void GetMigrationID(in int p1, in int p2, in bool p3) {
             unchecked
@@ -287,7 +399,7 @@ namespace Wargon.Ecsape {
             return false;
         }
         
-        private class Migration {
+        public class Migration {
             internal readonly int Archetype;
             internal readonly int ComponentType;
             internal readonly int Key;
@@ -319,7 +431,8 @@ namespace Wargon.Ecsape {
                 return false;
             }
             public override string ToString() {
-                return $"Migration #{Key} with component : {Component.GetComponentType(ComponentType).Name}";
+                return $"{Key} Migration with component:({Component.GetComponentType(ComponentType).Name})" +
+                       $"IsEmpty:({IsEmpty}) ToAdd:({ToAdd.Count}), ToRemove:({ToRemove.Count});";
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -355,8 +468,7 @@ namespace Wargon.Ecsape {
             return query;
         }
         public static Query With(this Query query, Type type) {
-            var typeIndex = Component.GetIndex(type);
-            query.with.Add(typeIndex);
+            query.with.Add(Component.GetIndex(type));
             return query;
         }
         public static Query Aspect<T>(this Query query) where T : struct, IAspect {
@@ -558,7 +670,12 @@ namespace Wargon.Ecsape {
             Count = 0;
             foreach (var i in set) Types[Count++] = i;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Mask(ref Span<int> set) {
+            Types = new int[set.Length];
+            Count = 0;
+            foreach (var i in set) Types[Count++] = i;
+        }
         public void Add(int type) {
             Types[Count] = type;
             Count++;

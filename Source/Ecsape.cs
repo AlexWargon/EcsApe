@@ -191,6 +191,7 @@ namespace Wargon.Ecsape {
     }
     public interface IPool {
         int Count { get; }
+        int Capacity { get; }
         ComponentInfo Info { get; }
         void Add(int entity);
         void AddBoxed(object component, int entity);
@@ -225,7 +226,8 @@ namespace Wargon.Ecsape {
         private int count;
         private T data;
         private int[] entities;
-
+        public int Capacity => entities.Length;
+        public int Count => count - 1;
         public TagPool(int size) {
             data = default;
             entities = new int[size];
@@ -233,22 +235,22 @@ namespace Wargon.Ecsape {
             count = 1;
             self = this;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T Get(int entity) {
             return ref data;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T Get(ref Entity entity) {
             return ref data;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Set(in T component, int entity) { }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(int entity) {
             entities[entity] = count;
             count++;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(in T component, int entity) {
             entities[entity] = count;
             data = component;
@@ -263,19 +265,22 @@ namespace Wargon.Ecsape {
             return entities;
         }
 
-        public void AddBoxed(object component, int entity) { }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AddBoxed(object component, int entity) {
+            entities[entity] = count;
+            data = (T)component;
+            count++;
+        }
 
         public void Remove(int entity) {
             entities[entity] = 0;
             count--;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         bool IPool.Has(int entity) {
             return entities[entity] > 0;
         }
-
-        public int Count => count - 1;
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         void IPool.Resize(int newSize) {
             Array.Resize(ref entities, newSize);
         }
@@ -296,7 +301,9 @@ namespace Wargon.Ecsape {
         private int count;
         private T[] data;
         private int[] entities;
+        public int Capacity => data.Length;
 
+        public int Count => count - 1;
         public Pool(int size) {
             data = new T[size];
             entities = new int[size];
@@ -304,26 +311,26 @@ namespace Wargon.Ecsape {
             count = 1;
             self = this;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T Get(int entity) {
             return ref data[entities[entity]];
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T Get(ref Entity entity) {
             return ref data[entities[entity.Index]];
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Set(in T component, int entity) {
             data[entities[entity]] = component;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(int entity) {
             if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
             entities[entity] = count;
             data[count] = default;
             count++;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(in T component, int entity) {
             if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
             entities[entity] = count;
@@ -331,19 +338,23 @@ namespace Wargon.Ecsape {
             count++;
         }
 
-        public void AddBoxed(object component, int entity) { }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AddBoxed(object component, int entity) {
+            if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
+            entities[entity] = count;
+            data[count] = (T)component;
+            count++;
+        }
         public void Remove(int entity) {
             entities[entity] = 0;
             count--;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         bool IPool.Has(int entity) {
             return entities[entity] > 0;
         }
 
-        public int Count => count - 1;
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         void IPool.Resize(int newSize) {
             Array.Resize(ref entities, newSize);
         }
@@ -372,7 +383,7 @@ namespace Wargon.Ecsape {
         private int count;
         private T[] data;
         private int[] entities;
-
+        public int Capacity => data.Length;
         public DisposablePool(int size) {
             data = new T[size];
             entities = new int[size];
@@ -380,25 +391,25 @@ namespace Wargon.Ecsape {
             count = 1;
             self = this;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T Get(int entity) {
             return ref data[entities[entity]];
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T Get(ref Entity entity) {
             return ref data[entities[entity.Index]];
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Set(in T component, int entity) {
             data[entities[entity]] = component;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(int entity) {
             if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
             entities[entity] = count;
             count++;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(in T component, int entity) {
             if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
             entities[entity] = count;
@@ -406,21 +417,26 @@ namespace Wargon.Ecsape {
             count++;
         }
 
-        public void AddBoxed(object component, int entity) { }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AddBoxed(object component, int entity) {
+            if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
+            entities[entity] = count;
+            data[count] = (T)component;
+            count++;
+        }
 
         public void Remove(int entity) {
             data[entities[entity]].Dispose();
-
             entities[entity] = 0;
             count--;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         bool IPool.Has(int entity) {
             return entities[entity] > 0;
         }
 
         public int Count => count - 1;
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         void IPool.Resize(int newSize) {
             Array.Resize(ref entities, newSize);
         }
@@ -875,6 +891,8 @@ namespace Wargon.Ecsape {
 
         public static IDependencyContext Register<T>(T instance) where T : class =>
             GetOrCreateContainer().Register(instance);
+
+        public static void Build(object instance) => GetOrCreateContainer().Build(instance);
     }
 
     public class DependencyContainer : IDependencyContainer {

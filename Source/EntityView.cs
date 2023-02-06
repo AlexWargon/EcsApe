@@ -15,11 +15,14 @@ namespace Wargon.Ecsape
         [SerializeField] private ConvertOption option;
         private void Start() {
             if(_linked) return;
-            var entity = World.Default.CreateEntity();
+            entity = World.Default.CreateEntity();
             entity.Add(new GameObjectSpawnedEvent{Link = this});
         }
-        public void Link(ref Entity entity)
-        {
+
+        public ref Entity Entity => ref entity;
+        private Entity entity;
+        public void Link(ref Entity entity) {
+            this.entity = entity;
             foreach (var component in Components)
             {
                 entity.AddBoxed(component);

@@ -7,6 +7,7 @@ namespace Wargon.Ecsape
         private bool linked;
         [SerializeField] private ConvertOption option;
         private Entity entity;
+        public ref Entity Entity => ref entity;
         private void Start() {
             if(linked) return;
             
@@ -15,6 +16,7 @@ namespace Wargon.Ecsape
         }
 
         public void Link(ref Entity entity) {
+            this.entity = entity;
             var links = GetComponents<IComponentLink>();
             foreach (var linkComponent in links) {
                 linkComponent.Link(ref entity);
@@ -52,6 +54,7 @@ namespace Wargon.Ecsape
     }
     
     public interface IMonoLink {
+        ref Entity Entity { get; }
         void Link(ref Entity entity);
     }
 
