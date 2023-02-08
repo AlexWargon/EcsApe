@@ -25,11 +25,12 @@ namespace Wargon.Ecsape {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNull(in this Entity entity) {
-            return World.Get(entity.WorldIndex).GetComponentAmount(in entity) == 0;
+            return World.Get(entity.WorldIndex).GetComponentAmount(in entity) == -1;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ref T Get<T>(in this Entity entity) where T : struct, IComponent {
+            if (entity.IsNull()) throw new Exception("ENTITY DEAD");
             ref var world = ref World.Get(entity.WorldIndex);
             var pool = world.GetPool<T>();
             if (pool.Has(entity.Index)) return ref pool.Get(entity.Index);
@@ -41,6 +42,7 @@ namespace Wargon.Ecsape {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Add<T>(in this Entity entity) where T : struct, IComponent {
+            if (entity.IsNull()) throw new Exception("ENTITY DEAD");
             ref var world = ref World.Get(entity.WorldIndex);
             var pool = world.GetPoolByIndex(Component<T>.Index);
             if(pool.Has(entity.Index)) return;
@@ -51,9 +53,11 @@ namespace Wargon.Ecsape {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Add<T>(in this Entity entity, in T component) where T : struct, IComponent {
+            if (entity.IsNull()) throw new Exception("ENTITY DEAD");
             ref var world = ref World.Get(entity.WorldIndex);
             var pool = world.GetPool<T>();
-            if(pool.Has(entity.Index)) return;
+            
+            //if(pool.Has(entity.Index)) return;
             pool.Add(in component, entity.Index);
             world.MigrateEntity(entity.Index, ref world.GetArchetypeId(entity.Index), pool.Info.Index, true);
             world.ChangeComponentsAmount(in entity, +1);

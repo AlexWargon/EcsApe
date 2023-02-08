@@ -8,7 +8,7 @@ namespace Wargon.Ecsape
     {
         
     }
-    public class EntityView : MonoBehaviour, IMonoLink {
+    public class EntityView : MonoBehaviour, IEntityLink {
 
         [SerializeReference] public List<object> Components;
         private bool _linked;

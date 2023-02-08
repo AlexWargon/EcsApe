@@ -97,12 +97,12 @@ namespace Wargon.Ecsape {
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void AddEntity(int entityId) {
+        internal void AddEntity(int entityId) {
             for (var i = 0; i < queriesCount; i++) queries[i].OnAddWith(entityId);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void RemoveEntity(int entityId) {
+        internal void RemoveEntity(int entityId) {
             for (var i = 0; i < queriesCount; i++) queries[i].OnRemoveWith(entityId);
         }
 
@@ -175,13 +175,13 @@ namespace Wargon.Ecsape {
     }
     public class Migrations {
         private readonly Dictionary<int, Archetype> archetypes;
-        private readonly Dictionary<MigrationID, Migration> cachedMigrations;
+        private readonly Dictionary<IntKey, Migration> cachedMigrations;
         private readonly World world;
-        private MigrationID currentMigrationID;
+        private IntKey currentMigrationKey;
         internal Migrations(World worldSource) {
             archetypes = new Dictionary<int, Archetype> {{0, Archetype.Empty}};
             Archetypes = new List<Archetype>();
-            cachedMigrations = new Dictionary<MigrationID, Migration>();
+            cachedMigrations = new Dictionary<IntKey, Migration>();
             world = worldSource;
             ArchetypesCount = 0;
         }
@@ -292,8 +292,8 @@ namespace Wargon.Ecsape {
                 var hash = 17;
                 hash += p1;
                 hash += p2;
-                hash += p3 ? 1 : 0;
-                currentMigrationID.value = hash;
+                hash += p3 ? 1 : -1;
+                currentMigrationKey.value = hash;
             }
         }
 
@@ -305,7 +305,7 @@ namespace Wargon.Ecsape {
         
             CacheArchetypes(archetypeCurrent, componentType, add, out var archetypeFrom, out var archetypeTo);
 
-            CacheMigrations(archetypeFrom.id, archetypeTo.id, componentType, add, currentMigrationID.value,
+            CacheMigrations(archetypeFrom.id, archetypeTo.id, componentType, add, currentMigrationKey.value,
                 out var migration);
             migration.Execute(entity);
             archetypeCurrent = migration.Archetype;
@@ -360,7 +360,7 @@ namespace Wargon.Ecsape {
                 }
             }
 
-            cachedMigrations.Add(currentMigrationID, toMigrate);
+            cachedMigrations.Add(currentMigrationKey, toMigrate);
             migration = toMigrate;
         }
 
@@ -391,7 +391,7 @@ namespace Wargon.Ecsape {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool HasMigration(int entity, ref int archetypeCurrent) {
-            if (cachedMigrations.TryGetValue(currentMigrationID, out var migration)) {
+            if (cachedMigrations.TryGetValue(currentMigrationKey, out var migration)) {
                 migration.Execute(entity);
                 archetypeCurrent = migration.Archetype;
                 return true;
@@ -444,11 +444,11 @@ namespace Wargon.Ecsape {
             }
         }
         
-        internal struct MigrationID : IEquatable<MigrationID> {
+        internal struct IntKey : IEquatable<IntKey> {
             internal int value;
-
+        
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public bool Equals(MigrationID other) {
+            public bool Equals(IntKey other) {
                 return other.value == value;
             }
 

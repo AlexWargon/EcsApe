@@ -1,4 +1,6 @@
-﻿namespace Wargon.Ecsape {
+﻿using Wargon.Ecsape.Pools;
+
+namespace Wargon.Ecsape {
     
     using System;
     using System.Collections.Generic;
@@ -57,8 +59,6 @@
         public static ref World Get(byte index) {
             return ref worlds[index];
         }
-
-        public EntityManager EntityManager => new(this);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void AddDirtyQuery(Query query) {
@@ -160,7 +160,7 @@
             
             archetype = 0;
             freeEntities.Add(index);
-            entityComponentsAmounts[index] = 0;
+            entityComponentsAmounts[index] = -1;
             activeEntitiesCount--;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -172,7 +172,7 @@
 
             archetype = 0;
             freeEntities.Add(index);
-            componentsAmount = 0;
+            componentsAmount = -1;
             activeEntitiesCount--;
         }
         public void CreatePool<T>() where T : struct, IComponent {
@@ -215,7 +215,7 @@
             componentsAmount += add;
             return ref componentsAmount;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal ref sbyte GetComponentAmount(in Entity entity) {
             return ref entityComponentsAmounts[entity.Index];
         }
@@ -243,11 +243,101 @@
         public Archetype GetArchetype(Span<int> span) {
             return migrations.GetOrCreateArchetype(ref span);
         }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ArchetypesCountInternal() => migrations.ArchetypesCount;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public List<Archetype> ArchetypesInternal() => migrations.Archetypes;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public IPool[] PoolsInternal() => pools;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int PoolsCountInternal() => poolsCount;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public List<Migrations.Migration> MigrationsInternal() => migrations.GetMigrations();
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Entity CreateEntity<TC1, TC2>(in TC1 component1, in TC2 component2)
+            where TC1 : struct, IComponent
+            where TC2 : struct, IComponent 
+        {
+            var e = CreateEntity();
+            Span<int> hash = stackalloc int[2] {Component<TC1>.Index, Component<TC2>.Index};
+            var archetype = GetArchetype(hash);
+            ref var archetypeId = ref GetArchetypeId(e.Index);
+            archetypeId = archetype.id;
+            GetPool<TC1>().Add(in component1, e.Index);
+            GetPool<TC2>().Add(in component2, e.Index);
+            archetype.AddEntity(e.Index);
+            return e;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Entity CreateEntity<TC1, TC2, TC3>(in TC1 component1, in TC2 component2, in TC3 component3)
+            where TC1 : struct, IComponent
+            where TC2 : struct, IComponent
+            where TC3 : struct, IComponent 
+        {
+            var e = CreateEntity();
+            
+            Span<int> hash = stackalloc int[3] {Component<TC1>.Index, Component<TC2>.Index, Component<TC3>.Index};
+            var archetype = GetArchetype(hash);
+            
+            ref var archetypeId = ref GetArchetypeId(e.Index);
+            archetypeId = archetype.id;
+            
+            GetPool<TC1>().Add(in component1, e.Index);
+            GetPool<TC2>().Add(in component2, e.Index);
+            GetPool<TC3>().Add(in component3, e.Index);
+            archetype.AddEntity(e.Index);
+            return e;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Entity CreateEntity<TC1, TC2, TC3, TC4>(in TC1 component1, in TC2 component2, in TC3 component3, in TC4 component4)
+            where TC1 : struct, IComponent
+            where TC2 : struct, IComponent
+            where TC3 : struct, IComponent
+            where TC4 : struct, IComponent
+        {
+            
+            var e = CreateEntity();
+            
+            Span<int> hash = stackalloc int[4] {Component<TC1>.Index, Component<TC2>.Index, Component<TC3>.Index, Component<TC4>.Index};
+            var archetype = GetArchetype(hash);
+            
+            ref var archetypeId = ref GetArchetypeId(e.Index);
+            archetypeId = archetype.id;
+            
+            GetPool<TC1>().Add(in component1, e.Index);
+            GetPool<TC2>().Add(in component2, e.Index);
+            GetPool<TC3>().Add(in component3, e.Index);
+            GetPool<TC4>().Add(in component4, e.Index);
+            archetype.AddEntity(e.Index);
+            return e;
+        }
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Entity CreateEntity<TC1, TC2, TC3, TC4, TC5>(in TC1 component1, in TC2 component2, in TC3 component3, in TC4 component4, in TC5 component5)
+            where TC1 : struct, IComponent
+            where TC2 : struct, IComponent
+            where TC3 : struct, IComponent
+            where TC4 : struct, IComponent
+            where TC5 : struct, IComponent
+        {
+            
+            var e = CreateEntity();
+            
+            Span<int> hash = stackalloc int[5] {Component<TC1>.Index, Component<TC2>.Index, Component<TC3>.Index, Component<TC4>.Index, Component<TC5>.Index};
+            var archetype = GetArchetype(hash);
+            
+            ref var archetypeId = ref GetArchetypeId(e.Index);
+            archetypeId = archetype.id;
+            
+            GetPool<TC1>().Add(in component1, e.Index);
+            GetPool<TC2>().Add(in component2, e.Index);
+            GetPool<TC3>().Add(in component3, e.Index);
+            GetPool<TC4>().Add(in component4, e.Index);
+            GetPool<TC5>().Add(in component5, e.Index);
+            archetype.AddEntity(e.Index);
+            return e;
+        }
     }
 
     public partial class World {
@@ -266,6 +356,7 @@
                 return defaultIndex;
             }
         }
+        
         public static World GetOrCreate(string name) {
             name ??= DEFAULT;
             if (ids.TryGetValue(name, out var index))
@@ -276,6 +367,8 @@
             Debug.Log($"World {name} was not existed but created");
             return world;
         }
+        
+
         public static World GetOrCreate() {
             if (ids.TryGetValue(DEFAULT, out var index))
                 return Get(index);
@@ -305,25 +398,5 @@
             }
         }
 
-    }
-    
-    public readonly struct EntityManager {
-        private readonly World _world;
-
-        public EntityManager(World world) {
-            _world = world;
-        }
-
-        public Entity CreateEntity() {
-            return _world.CreateEntity();
-        }
-
-        public void Add<T>(in T data, in Entity entity) where T : struct, IComponent {
-            _world.GetPool<T>().Add(in data, entity.Index);
-        }
-
-        public void Add<T>(in Entity entity) where T : struct, IComponent {
-            _world.GetPoolByIndex(Component<T>.Index).Add(entity.Index);
-        }
     }
 }

@@ -3,14 +3,14 @@ using Object = UnityEngine.Object;
 
 namespace Wargon.Ecsape
 {
-    public class EntityLink : MonoBehaviour, IMonoLink {
-        private bool linked;
+    public class EntityLink : MonoBehaviour, IEntityLink {
+        public bool linked;
         [SerializeField] private ConvertOption option;
         private Entity entity;
         public ref Entity Entity => ref entity;
         private void Start() {
             if(linked) return;
-            
+
             entity = World.Default.CreateEntity();
             entity.Add(new GameObjectSpawnedEvent{Link = this});
         }
@@ -53,7 +53,7 @@ namespace Wargon.Ecsape
         Stay
     }
     
-    public interface IMonoLink {
+    public interface IEntityLink {
         ref Entity Entity { get; }
         void Link(ref Entity entity);
     }
@@ -78,25 +78,25 @@ namespace Wargon.Ecsape
     }
 
     internal struct GameObjectSpawnedEvent : IComponent {
-        public IMonoLink Link;
+        public IEntityLink Link;
     }
     
     public sealed class ConvertEntitySystem : ISystem {
         private Query _gameObjects;
         private IPool<GameObjectSpawnedEvent> _pool;
         
-        public void OnCreate(World worldSource) {
-            _gameObjects = worldSource.GetQuery().With<GameObjectSpawnedEvent>();
-            _pool = worldSource.GetPool<GameObjectSpawnedEvent>();
+        public void OnCreate(World world) {
+            _gameObjects = world.GetQuery().With<GameObjectSpawnedEvent>();
+            _pool = world.GetPool<GameObjectSpawnedEvent>();
             
             foreach (var monoLink in Object.FindObjectsOfType<EntityView>()) {
-                var e = worldSource.CreateEntity();
+                var e = world.CreateEntity();
                 monoLink.Link(ref e);
             }
-            foreach (var monoLink in Object.FindObjectsOfType<EntityLink>()) {
-                var e = worldSource.CreateEntity();
-                monoLink.Link(ref e);
-            }
+            // foreach (var monoLink in Object.FindObjectsOfType<EntityLink>()) {
+            //     var e = world.CreateEntity();
+            //     monoLink.Link(ref e);
+            // }
         }
         
         public void OnUpdate(float deltaTime) {

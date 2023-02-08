@@ -3,11 +3,9 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Wargon.Ecsape.Pools;
 
 namespace Wargon.Ecsape {
-    public interface INew {
-        void New();
-    }
 
     public interface IComponent { }
 
@@ -24,17 +22,14 @@ namespace Wargon.Ecsape {
         public static readonly bool IsTag;
         public static readonly bool IsEvent;
         public static readonly bool IsClearOnEnfOfFrame;
-        public static readonly bool IsSelfNew;
         public static readonly bool IsDisposable;
         
         static Component() {
             Type = typeof(T);
             Index = Component.GetIndex(Type);
-            
             IsSingleTone = typeof(ISingletoneComponent).IsAssignableFrom(Type);
             IsEvent = typeof(IEventComponent).IsAssignableFrom(Type);
             IsClearOnEnfOfFrame = typeof(IClearOnEndOfFrame).IsAssignableFrom(Type);
-            IsSelfNew = typeof(INew).IsAssignableFrom(Type);
             IsDisposable = typeof(IDisposable).IsAssignableFrom(Type);
             IsTag = Type.GetFields().Length == 0;
             Component.AddInfo(Index, AsComponentInfo());
@@ -43,14 +38,13 @@ namespace Wargon.Ecsape {
             }
         }
 
-        public Component(int idx, bool singleTone, bool tag, bool @event, bool clearOnEnfOfFrame, bool selfNew,
+        public Component(int idx, bool singleTone, bool tag, bool @event, bool clearOnEnfOfFrame,
             bool disposable) {
             index = idx;
             isSingleTone = singleTone;
             isTag = tag;
             isEvent = @event;
             isClearOnEnfOfFrame = clearOnEnfOfFrame;
-            isSelfNew = selfNew;
             isDisposable = disposable;
         }
 
@@ -59,20 +53,19 @@ namespace Wargon.Ecsape {
         public readonly bool isTag;
         public readonly bool isEvent;
         public readonly bool isClearOnEnfOfFrame;
-        public readonly bool isSelfNew;
         public readonly bool isDisposable;
 
         public static Component<T> AsRef() {
-            return new Component<T>(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsSelfNew, IsDisposable);
+            return new Component<T>(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsDisposable);
         }
 
         public static ComponentInfo AsComponentInfo() {
-            return new ComponentInfo(Index, Type, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsSelfNew,
+            return new ComponentInfo(Index, Type, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame,
                 IsDisposable);
         }
 
         public static ComponentType AsComponentType() {
-            return new ComponentType(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsSelfNew, IsDisposable);
+            return new ComponentType(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsDisposable);
         }
     }
 
@@ -83,17 +76,14 @@ namespace Wargon.Ecsape {
         public readonly bool IsTag;
         public readonly bool IsEvent;
         public readonly bool IsClearOnEnfOfFrame;
-        public readonly bool isSelfNew;
         public readonly bool IsDisposable;
         
-        public ComponentInfo(int index, Type type, bool isSingletone, bool isTag, bool isEvent, bool clearOnEnfOfFrame,
-            bool selfNew, bool disposable) {
+        public ComponentInfo(int index, Type type, bool isSingletone, bool isTag, bool isEvent, bool clearOnEnfOfFrame, bool disposable) {
             Index = index;
             Type = type;
             IsSingletone = isSingletone;
             IsTag = isTag;
             IsEvent = isEvent;
-            isSelfNew = selfNew;
             IsClearOnEnfOfFrame = clearOnEnfOfFrame;
             IsDisposable = disposable;
         }
@@ -105,17 +95,13 @@ namespace Wargon.Ecsape {
         public readonly bool IsTag;
         public readonly bool IsEvent;
         public readonly bool IsClearOnEnfOfFrame;
-        public readonly bool IsSelfNew;
-
         public readonly bool IsDisposable;
 
-        public ComponentType(int index, bool isSingletone, bool isTag, bool isEvent, bool clearOnEnfOfFrame,
-            bool selfNew, bool disposable) {
+        public ComponentType(int index, bool isSingletone, bool isTag, bool isEvent, bool clearOnEnfOfFrame, bool disposable) {
             Index = index;
             IsSingletone = isSingletone;
             IsTag = isTag;
             IsEvent = isEvent;
-            IsSelfNew = selfNew;
             IsClearOnEnfOfFrame = clearOnEnfOfFrame;
             IsDisposable = disposable;
         }
@@ -126,7 +112,6 @@ namespace Wargon.Ecsape {
             IsSingletone = info.IsSingletone;
             IsTag = info.IsTag;
             IsEvent = info.IsEvent;
-            IsSelfNew = info.isSelfNew;
             IsClearOnEnfOfFrame = info.IsClearOnEnfOfFrame;
             IsDisposable = info.IsDisposable;
         }
@@ -166,7 +151,7 @@ namespace Wargon.Ecsape {
         }
 
         internal static void AddInfo(int index, ComponentInfo info) {
-            if (componentInfos.Length - 1 == index) Array.Resize(ref componentInfos, index * 2);
+            if (componentInfos.Length - 1 <= index) Array.Resize(ref componentInfos, index * 2);
             componentInfos[index] = info;
         }
 
@@ -189,30 +174,33 @@ namespace Wargon.Ecsape {
             return Activator.CreateInstance(genericType.MakeGenericType(elementsType), parameters);
         }
     }
-    public interface IPool {
-        int Count { get; }
-        int Capacity { get; }
-        ComponentInfo Info { get; }
-        void Add(int entity);
-        void AddBoxed(object component, int entity);
-        void Remove(int entity);
-        bool Has(int entity);
 
-        static IPool New(int size, int typeIndex) {
-            var info = Component.GetInfo(typeIndex);
-            var componentType = Component.GetComponentType(typeIndex);
-            var poolType = info.IsTag || info.IsSingletone || info.IsEvent ? typeof(TagPool<>)
-                : info.IsDisposable ? typeof(DisposablePool<>) : typeof(Pool<>);
-            var pool = (IPool) Generic.New(poolType, componentType, size);
-            return pool;
+    namespace Pools {
+        public interface IPool {
+            int Count { get; }
+            int Capacity { get; }
+            ComponentInfo Info { get; }
+            void Add(int entity);
+            void AddBoxed(object component, int entity);
+            void Remove(int entity);
+            bool Has(int entity);
+
+            static IPool New(int size, int typeIndex) {
+                var info = Component.GetInfo(typeIndex);
+                var componentType = Component.GetComponentType(typeIndex);
+                var poolType = info.IsTag || info.IsSingletone || info.IsEvent ? typeof(TagPool<>)
+                    : info.IsDisposable ? typeof(DisposablePool<>) : typeof(Pool<>);
+                var pool = (IPool) Generic.New(poolType, componentType, size);
+                return pool;
+            }
+
+            void Resize(int newSize);
+            IComponent GetRaw(int index);
         }
-
-        void Resize(int newSize);
-        IComponent GetRaw(int index);
     }
 
 
-    public interface IPool<T> : IPool where T : struct, IComponent {
+    public interface IPool<T> : Pools.IPool where T : struct, IComponent {
         ref T Get(int entity);
         ref T Get(ref Entity entity);
         void Set(in T component, int entity);
@@ -484,20 +472,6 @@ namespace Wargon.Ecsape {
         }
     }
 
-    /// <summary>
-    ///     Execute when trigger has entity. Component not removing
-    /// </summary>
-    public interface ITriggerSystem : ISystem {
-        Query Trigger { get; set; }
-
-        void ISystem.OnUpdate(float deltaTime) {
-            if (Trigger.IsEmpty) return;
-            foreach (ref var entity in Trigger) Execute(ref entity);
-        }
-
-        void Execute(ref Entity entity);
-    }
-
     public interface IEntitySystem : ISystem {
         Query Query { get; set; }
 
@@ -519,10 +493,10 @@ namespace Wargon.Ecsape {
         protected World world; // ReSharper disable Unity.PerformanceAnalysis
         public abstract void Execute(ref Entity entity);
 
-        public void OnCreate(World worldSource) {
-            world = worldSource;
-            pool = world.GetPool<T>();
-            trigger = world.GetQuery().With<T>();
+        public void OnCreate(World world) {
+            this.world = world;
+            pool = this.world.GetPool<T>();
+            trigger = this.world.GetQuery().With<T>();
         }
 
         void ISystem.OnUpdate(float deltaTime) {
@@ -542,7 +516,7 @@ namespace Wargon.Ecsape {
     ///     Execute every frame
     /// </summary>
     public interface ISystem {
-        void OnCreate(World worldSource); // ReSharper disable Unity.PerformanceAnalysis
+        void OnCreate(World world); // ReSharper disable Unity.PerformanceAnalysis
         void OnUpdate(float deltaTime); // ReSharper disable Unity.PerformanceAnalysis
     }
 
@@ -550,15 +524,14 @@ namespace Wargon.Ecsape {
         private IPool<T> pool;
         private Query query;
 
-        public void OnCreate(World worldSource) {
-            query = worldSource.GetQuery().With<T>();
+        public void OnCreate(World world) {
+            query = world.GetQuery().With<T>();
         }
 
         public void OnUpdate(float deltaTime) {
             if (query.IsEmpty) return;
             //Debug.Log($"{typeof(T).Name} cleared {pool.Count} times");
             foreach (ref var entity in query) {
-                //pool.Remove(entity.Index);
                 entity.Remove<T>();
             }
         }
@@ -570,9 +543,9 @@ namespace Wargon.Ecsape {
         private World world;
         private Query query;
 
-        public void OnCreate(World worldSource) {
-            query = worldSource.GetQuery().With<DestroyEntity>();
-            world = worldSource;
+        public void OnCreate(World world) {
+            query = world.GetQuery().With<DestroyEntity>();
+            this.world = world;
         }
 
         public void OnUpdate(float deltaTime) {
@@ -587,7 +560,7 @@ namespace Wargon.Ecsape {
         private int counter;
         private int skip;
         private float skippedDeltaTime;
-        public abstract void OnCreate(World worldSource);
+        public abstract void OnCreate(World world);
 
         void ISystem.OnUpdate(float deltaTime) {
             if (counter == 0) {
@@ -779,7 +752,7 @@ namespace Wargon.Ecsape {
         public class Group {
             internal ISystem[] systems;
             internal int count;
-            private readonly string name;
+            protected readonly string name;
             public string Name => name;
 
             public Group() {
@@ -803,6 +776,12 @@ namespace Wargon.Ecsape {
                 if (count >= systems.Length - 1) Array.Resize(ref systems, systems.Length << 1);
                 systems[count] = system;
                 count++;
+                return this;
+            }
+            public Group Add(Group group) {
+                for (int i = 0; i < group.count; i++) {
+                    Add(group.systems[i]);
+                }
                 return this;
             }
         }
@@ -839,96 +818,6 @@ namespace Wargon.Ecsape {
         }
     }
 
-    public interface IDependencyContext {
-        IDependencyContext From<T>() where T : class;
-        IDependencyContext From<T>(T isntance) where T : class;
-        object GetInstance();
-    }
-
-    public interface IDependencyContainer {
-        void Build(object target);
-        IDependencyContext Register<T>() where T : class;
-        IDependencyContext Register<T>(T item) where T : class;
-    }
-
-    public class DependencyContext : IDependencyContext {
-        private object instance;
-        private Type instanceType;
-
-        IDependencyContext IDependencyContext.From<T>() {
-            instanceType = typeof(T);
-            instance = Activator.CreateInstance(typeof(T));
-            return this;
-        }
-
-        IDependencyContext IDependencyContext.From<T>(T instanceSource) {
-            instanceType = typeof(T);
-            instance = instanceSource;
-            return this;
-        }
-
-        public object GetInstance() {
-            return instance;
-        }
-    }
-
-
-    public static class DI {
-        private static IDependencyContainer container;
-
-        public static IDependencyContainer GetOrCreateContainer() {
-            if (container == null)
-                container = new DependencyContainer();
-            return container;
-        }
-        public static IDependencyContainer GetOrCreateContainer<T>() where T : IDependencyContainer {
-            if (container == null)
-                container = Activator.CreateInstance<T>();
-            return container;
-        }
-        public static IDependencyContext Register<T>() where T : class =>
-            GetOrCreateContainer().Register<T>();
-
-        public static IDependencyContext Register<T>(T instance) where T : class =>
-            GetOrCreateContainer().Register(instance);
-
-        public static void Build(object instance) => GetOrCreateContainer().Build(instance);
-    }
-
-    public class DependencyContainer : IDependencyContainer {
-        private readonly IDictionary<Type, IDependencyContext> constexts;
-
-        internal DependencyContainer() {
-            constexts = new Dictionary<Type, IDependencyContext>();
-            Register<IDependencyContainer>().From(this);
-        }
-
-        public IDependencyContext Register<T>() where T : class {
-            var context = new DependencyContext();
-            constexts.Add(typeof(T), context);
-            return context;
-        }
-
-        public IDependencyContext Register<T>(T item) where T : class {
-            var context = new DependencyContext();
-            constexts.Add(typeof(T), context);
-            constexts[typeof(T)].From(item);
-            return context;
-        }
-
-        public void Build(object instance) {
-            var type = instance.GetType();
-            var fields = type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-
-            foreach (var fieldInfo in fields) {
-                var fieldType = fieldInfo.FieldType;
-
-                if (constexts.TryGetValue(fieldType, out var context1)) {
-                    fieldInfo.SetValue(instance, context1.GetInstance());
-                }
-            }
-        }
-    }
 
     public unsafe struct UnsafeDelegate<T> {
         private delegate*<T,void>* delegates;
@@ -1017,6 +906,30 @@ namespace Wargon.Ecsape {
         }
         internal static void LogError(object massage) {
             UnityEngine.Debug.LogError(massage);
+        }
+    }
+    public sealed class SyncTransformsSystem : ISystem {
+        private Query query;
+        private IPool<Components.TransformReference> transforms;
+        private IPool<Translation> translations;
+        public void OnCreate(World world) {
+            query = world.GetQuery()
+                .With<Translation>()
+                .With<Components.TransformReference>()
+                .With<Active>()
+                .Without<StaticTag>();
+        }
+
+        public void OnUpdate(float deltaTime) {
+            if(query.IsEmpty) return;
+            foreach (var entity in query) {
+                ref var transform = ref transforms.Get(entity.Index);
+                ref var translation = ref translations.Get(entity.Index);
+                transform.value.position = translation.position;
+                transform.value.rotation = translation.rotation;
+                transform.value.localScale = translation.scale;
+            }
+            //Debug.Log(_query.Count);
         }
     }
 }
