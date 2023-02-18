@@ -10,13 +10,14 @@ namespace Wargon.Ecsape
                     From = entity,
                     To = link.Entity
                 });
-            }    
+            }
+            
         }
 
         public void Destroy() {
             
         }
-
+        public ComponentType ComponentType { get; }
         public void Link(ref Entity entity) {
             this.entity = entity;
         }

@@ -6,7 +6,6 @@ namespace Wargon.Ecsape {
         public World World => world;
         [SerializeField] private int entitiesCount;
         [SerializeField] private int archetypesCount;
-
         private void LateUpdate() {
             entitiesCount = world.ActiveEntitiesCount;
             archetypesCount = world.ArchetypesCountInternal();

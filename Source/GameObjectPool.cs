@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 using UnityEngine.Pool;
-using Wargon.Ecsape.Components;
 using Object = UnityEngine.Object;
 
 namespace Wargon.Ecsape {
@@ -19,13 +17,17 @@ namespace Wargon.Ecsape {
 
     public static class EntityPoolExtensions {
         public static void FreeView(in this Entity entity) {
-            entity.Remove<Active>();
+            entity.Remove<Pooled>();
         }
     }
-    public struct Active : IComponent {
+    [Serializable]
+    public struct Pooled : IComponent, IDisposable {
         public int id;
         public EntityLink view;
         public float lifeTime;
+        public void Dispose() {
+            Object.Destroy(view.gameObject);
+        }
     }
 
     public sealed class MyObjectPool : IObjectPool {
@@ -38,48 +40,68 @@ namespace Wargon.Ecsape {
             private T prefab;
             private Queue<T> buffer;
             private PoolAction onCreate;
-            private PoolAction onSpawn;
+            private Action<T> onSpawn;
             private Action<T> onHide;
             private int size;
             private int count;
-            public Pool(T prefab, int size, PoolAction onCreate, PoolAction onSpawn, Action<T> onHide) {
+            public Transform parent;
+            public Pool(T prefab, int size) {
+                parent = new GameObject($"[pool:{prefab.name}]").transform;
                 buffer = new Queue<T>();
                 this.prefab = prefab;
-                this.onCreate = onCreate;
-                this.onSpawn = onSpawn;
-                this.onHide = onHide;
-                for (int i = 0; i < size; i++) {
-                    buffer.Enqueue(this.onCreate(prefab));
-                }
-
                 this.size = size;
                 count = size;
             }
+
+            public Pool<T> Populate() {
+                for (int i = 0; i < size; i++) {
+                    buffer.Enqueue(onCreate(prefab));
+                }
+                return this;
+            }
+
+            public Pool<T> OnCreate(PoolAction onCreate) {
+                this.onCreate = onCreate;
+                return this;
+            }
+
+            public Pool<T> OnSpawn(Action<T> onSpawn) {
+                this.onSpawn = onSpawn;
+                return this;
+            }
+
+            public Pool<T> OnHide(Action<T> onHide) {
+                this.onHide = onHide;
+                return this;
+            }
             public void Back(T item) {
-                onHide(item);
                 buffer.Enqueue(item);
+                onHide(item);
             }
 
             public void Enqueue(T item) => buffer.Enqueue(item);
-            public T Spawn() {
 
-                var e = buffer.Dequeue();
-                if (e.gameObject.activeSelf) {
-                    
-                    for (int i = 0; i < 16; i++) {
-                        buffer.Enqueue(onCreate(prefab));
-                    }
-                    buffer.Enqueue(e);
-
-                    return onSpawn(buffer.Dequeue());
+            private void AddSize(int add) {
+                for (int i = 0; i < add; i++) {
+                    buffer.Enqueue(onCreate(prefab));
                 }
-                return onSpawn(e);
+            }
+            public T Spawn() {
+                if(buffer.Count == 0) AddSize(16);
+                var e = buffer.Dequeue();
+                // if (e.gameObject.activeInHierarchy) {
+                //     buffer.Enqueue(e);
+                //     AddSize(16);
+                //     return Spawn();
+                // }
+                
+                onSpawn(e);
+                return e;
             }
         }
 
         private Dictionary<int, Pool<EntityLink>> pools = new();
-        private World world;
-        public void SetWorld(World world) => this.world = world;
+
         public Transform Spawn(Transform prefab, Vector3 position, Quaternion rotation) {
             return null;
         }
@@ -91,37 +113,38 @@ namespace Wargon.Ecsape {
         public EntityLink Spawn(EntityLink prefab, Vector3 position, Quaternion rotation) {
             var id = prefab.GetInstanceID();
             if (pools.TryGetValue(id, out var pool)) {
-                return pool.Spawn();
-            }
-            pools.Add(id, new Pool<EntityLink>(prefab, 132,
-                link => {
-                var o = Object.Instantiate(link);
+                var x = pool.Spawn();
+                ref var e = ref x.Entity;
+                e.Get<Translation>().rotation = rotation;
+                e.Get<Translation>().position = position;
+                e.Remove<StaticTag>();
+                ref var pooled = ref e.Get<Pooled>();
+                pooled.lifeTime = 1f;
+                pooled.id = id;
+                pooled.view = x;
                 
+                return x;
+            }
+
+            var newPool = new Pool<EntityLink>(prefab, 16);
+            newPool.OnCreate(x => {
+                var o = Object.Instantiate(x, newPool.parent);
                 if (!o.linked) {
-                    var e = world.CreateEntity();
+                    var e = World.Default.CreateEntity();
                     o.Link(ref e);
                 }
                 
+                o.Entity.Add<StaticTag>();
                 o.gameObject.SetActive(false);
                 return o;
-            }, link => {
-   
-                link.Entity.Add(new Active {
-                    id = id,
-                    view = link,
-                    lifeTime = 0.4f
-                });
-                    
-                ref var t = ref link.Entity.Get<Translation>();
-                t.position = position;
-                t.rotation = rotation;
-                // link.transform.position = position;
-                // link.transform.rotation = rotation;
-                link.gameObject.SetActive(true);
-                return link;
-            }, link => {
-                //link.gameObject.SetActive(false);
-            }));
+            }).OnSpawn(x => {
+                x.gameObject.SetActive(true);
+
+            }).OnHide(x => {
+                x.Entity.Add<StaticTag>();
+                x.gameObject.SetActive(false);
+            }).Populate();
+            pools.Add(id, newPool);
             return pools[id].Spawn();
         }
 
@@ -134,8 +157,8 @@ namespace Wargon.Ecsape {
         }
 
         public void Release(EntityLink view, int id) {
-            view.gameObject.SetActive(false);
-            pools[id].Back(view);
+            if(pools.TryGetValue(id, out var pool))
+                pool.Back(view);
         }
     }
     public sealed class GameObjectPool : IObjectPool {
@@ -161,12 +184,13 @@ namespace Wargon.Ecsape {
                         var e = World.Default.CreateEntity();
                         link.Link(ref e);
                     }
+                    t.gameObject.SetActive(false);
                     return t;
                 }, 
                 x => x.gameObject.SetActive(true), 
                 x=> x.gameObject.SetActive(false));
             transformPools.Add(id, newPool);
-            return Spawn(prefab, position, rotation);
+            return Spawn(prefab, position,rotation);
         }
         public GameObject Spawn(GameObject prefab, Vector3 position, Quaternion rotation) {
             var id = prefab.GetInstanceID();
@@ -188,32 +212,42 @@ namespace Wargon.Ecsape {
         public EntityLink Spawn(EntityLink prefab, Vector3 position, Quaternion rotation) {
             var id = prefab.GetInstanceID();
             if (entityLinkPools.TryGetValue(id, out var pool)) {
-                return pool.Get();
+                var x = pool.Get();
+                ref var e = ref x.Entity;
+                ref var translation = ref e.Get<Translation>();
+                translation.rotation = rotation;
+                translation.position = position;
+                e.Remove<StaticTag>();
+                ref var pooled = ref e.Get<Pooled>();
+                pooled.lifeTime = 1f;
+                pooled.id = id;
+                pooled.view = x;
+                
+                return x;
             }
             
             var newPool = new ObjectPool<EntityLink>(
                 () => {
-                    var e = Object.Instantiate(prefab);
-                    var ee = World.Default.CreateEntity();
-                    e.Link(ref ee);
-
-                    return e;
+                    var o = Object.Instantiate(prefab);
+                    if (!o.linked) {
+                        var e = World.Default.CreateEntity();
+                        o.Link(ref e);
+                    }
+                
+                    o.Entity.Add<StaticTag>();
+                    o.gameObject.SetActive(false);
+                    return o;
+                    
                 },
                 x => {
-                    x.Entity.Add(new Active {
-                        id = id,
-                        view = x
-                    });
-                    
-                    ref var t = ref x.Entity.Get<Translation>();
-                    t.position = position;
-                    t.rotation = rotation;
                     x.gameObject.SetActive(true);
-                }, 
-                x=> x.gameObject.SetActive(false));
+                },
+                x => {
+                    
+                });
             
             entityLinkPools.Add(id, newPool);
-            return entityLinkPools[id].Get();
+            return Spawn(prefab, position, rotation);
         }
 
         public void Release(Transform view, int id) {
@@ -228,8 +262,12 @@ namespace Wargon.Ecsape {
         }
 
         public void Release(EntityLink view, int id) {
-            //if(!entityLinkPools.ContainsKey(id)) return;
-            entityLinkPools[id].Release(view);
+            if (entityLinkPools.TryGetValue(id, out var pool)) {
+                view.Entity.Add<StaticTag>();
+                view.gameObject.SetActive(false);
+                pool.Release(view);
+                
+            }
         }
     }
 }

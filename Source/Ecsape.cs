@@ -27,12 +27,14 @@ namespace Wargon.Ecsape {
         static Component() {
             Type = typeof(T);
             Index = Component.GetIndex(Type);
-            IsSingleTone = typeof(ISingletoneComponent).IsAssignableFrom(Type);
-            IsEvent = typeof(IEventComponent).IsAssignableFrom(Type);
-            IsClearOnEnfOfFrame = typeof(IClearOnEndOfFrame).IsAssignableFrom(Type);
-            IsDisposable = typeof(IDisposable).IsAssignableFrom(Type);
-            IsTag = Type.GetFields().Length == 0;
-            Component.AddInfo(Index, AsComponentInfo());
+            
+            ref var componentType = ref Component.GetComponentType(Index);
+            IsSingleTone = componentType.IsSingletone;
+            IsTag = componentType.IsTag;
+            IsEvent = componentType.IsEvent;
+            IsClearOnEnfOfFrame = componentType.IsClearOnEnfOfFrame;
+            IsDisposable = componentType.IsDisposable;
+            
             if (IsClearOnEnfOfFrame) {
                 DefaultClearSystems.Add<ClearEventsSystem<T>>();
             }
@@ -59,36 +61,12 @@ namespace Wargon.Ecsape {
             return new Component<T>(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsDisposable);
         }
 
-        public static ComponentInfo AsComponentInfo() {
-            return new ComponentInfo(Index, Type, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame,
-                IsDisposable);
-        }
-
         public static ComponentType AsComponentType() {
-            return new ComponentType(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsDisposable);
+            return new ComponentType(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsDisposable, Type.Name);
         }
     }
 
-    public readonly struct ComponentInfo {
-        public readonly int Index;
-        public readonly Type Type;
-        public readonly bool IsSingletone;
-        public readonly bool IsTag;
-        public readonly bool IsEvent;
-        public readonly bool IsClearOnEnfOfFrame;
-        public readonly bool IsDisposable;
-        
-        public ComponentInfo(int index, Type type, bool isSingletone, bool isTag, bool isEvent, bool clearOnEnfOfFrame, bool disposable) {
-            Index = index;
-            Type = type;
-            IsSingletone = isSingletone;
-            IsTag = isTag;
-            IsEvent = isEvent;
-            IsClearOnEnfOfFrame = clearOnEnfOfFrame;
-            IsDisposable = disposable;
-        }
-    }
-
+    [Serializable]
     public readonly struct ComponentType : IEquatable<ComponentType> {
         public readonly int Index;
         public readonly bool IsSingletone;
@@ -96,24 +74,15 @@ namespace Wargon.Ecsape {
         public readonly bool IsEvent;
         public readonly bool IsClearOnEnfOfFrame;
         public readonly bool IsDisposable;
-
-        public ComponentType(int index, bool isSingletone, bool isTag, bool isEvent, bool clearOnEnfOfFrame, bool disposable) {
+        public readonly string Name;
+        public ComponentType(int index, bool isSingletone, bool isTag, bool isEvent, bool clearOnEnfOfFrame, bool disposable, string name) {
             Index = index;
             IsSingletone = isSingletone;
             IsTag = isTag;
             IsEvent = isEvent;
             IsClearOnEnfOfFrame = clearOnEnfOfFrame;
             IsDisposable = disposable;
-        }
-
-        public ComponentType(Type type) {
-            var info = Component.GetInfoByType(type);
-            Index = info.Index;
-            IsSingletone = info.IsSingletone;
-            IsTag = info.IsTag;
-            IsEvent = info.IsEvent;
-            IsClearOnEnfOfFrame = info.IsClearOnEnfOfFrame;
-            IsDisposable = info.IsDisposable;
+            Name = name;
         }
 
         public bool Equals(ComponentType other) {
@@ -128,13 +97,13 @@ namespace Wargon.Ecsape {
     public struct Component {
         private static readonly Dictionary<int, Type> typeByIndex;
         private static readonly Dictionary<Type, int> indexByType;
-        private static ComponentInfo[] componentInfos;
+        private static ComponentType[] componentTypes;
         private static int count;
         public const int DESTROY_ENTITY = 0;
         static Component() {
             typeByIndex = new Dictionary<int, Type>();
             indexByType = new Dictionary<Type, int>();
-            componentInfos = new ComponentInfo[32];
+            componentTypes = new ComponentType[32];
         }
 
         public static int GetIndex(Type type) {
@@ -142,31 +111,34 @@ namespace Wargon.Ecsape {
             var index = count;
             indexByType.Add(type, index);
             typeByIndex.Add(index, type);
+            var componentType = new ComponentType(index,
+                typeof(ISingletoneComponent).IsAssignableFrom(type),
+                type.GetFields().Length == 0,
+                typeof(IEventComponent).IsAssignableFrom(type),
+                typeof(IClearOnEndOfFrame).IsAssignableFrom(type),
+                typeof(IDisposable).IsAssignableFrom(type), 
+                type.Name);
+            AddInfo(ref componentType, index);
             count++;
             return index;
         }
 
-        public static Type GetComponentType(int index) {
+        private static void AddInfo(ref ComponentType type, int index) {
+            if (componentTypes.Length - 1 <= index) Array.Resize(ref componentTypes, index + 16);
+            componentTypes[index] = type;
+        }
+        public static Type GetTypeOfComponent(int index) {
             return typeByIndex[index];
         }
 
-        internal static void AddInfo(int index, ComponentInfo info) {
-            if (componentInfos.Length - 1 <= index) Array.Resize(ref componentInfos, index * 2);
-            componentInfos[index] = info;
-        }
-
-        internal static ref ComponentInfo GetInfo(int index) {
-            return ref componentInfos[index];
-        }
-
-        internal static ref ComponentInfo GetInfoByType(Type type) {
-            return ref componentInfos[GetIndex(type)];
+        public static ref ComponentType GetComponentType(int index) {
+            return ref componentTypes[index];
         }
     }
 
     public static class ComponentExtensions {
         internal static Type GetTypeFromIndex(this int index) {
-            return Component.GetComponentType(index);
+            return Component.GetTypeOfComponent(index);
         }
     }
     public static class Generic {
@@ -179,15 +151,16 @@ namespace Wargon.Ecsape {
         public interface IPool {
             int Count { get; }
             int Capacity { get; }
-            ComponentInfo Info { get; }
+            ComponentType Info { get; }
             void Add(int entity);
             void AddBoxed(object component, int entity);
+            void SetBoxed(object component, int entity);
             void Remove(int entity);
             bool Has(int entity);
 
             static IPool New(int size, int typeIndex) {
-                var info = Component.GetInfo(typeIndex);
-                var componentType = Component.GetComponentType(typeIndex);
+                var info = Component.GetComponentType(typeIndex);
+                var componentType = Component.GetTypeOfComponent(typeIndex);
                 var poolType = info.IsTag || info.IsSingletone || info.IsEvent ? typeof(TagPool<>)
                     : info.IsDisposable ? typeof(DisposablePool<>) : typeof(Pool<>);
                 var pool = (IPool) Generic.New(poolType, componentType, size);
@@ -195,7 +168,7 @@ namespace Wargon.Ecsape {
             }
 
             void Resize(int newSize);
-            IComponent GetRaw(int index);
+            object GetRaw(int index);
         }
     }
 
@@ -219,7 +192,7 @@ namespace Wargon.Ecsape {
         public TagPool(int size) {
             data = default;
             entities = new int[size];
-            Info = Component<T>.AsComponentInfo();
+            Info = Component<T>.AsComponentType();
             count = 1;
             self = this;
         }
@@ -233,6 +206,10 @@ namespace Wargon.Ecsape {
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Set(in T component, int entity) { }
+
+        public void SetBoxed(object component, int entity) {
+            data = (T) component;
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(int entity) {
             entities[entity] = count;
@@ -273,9 +250,9 @@ namespace Wargon.Ecsape {
             Array.Resize(ref entities, newSize);
         }
 
-        public ComponentInfo Info { get; }
+        public ComponentType Info { get; }
 
-        IComponent IPool.GetRaw(int index) {
+        object IPool.GetRaw(int index) {
             return Get(index);
         }
 
@@ -295,7 +272,7 @@ namespace Wargon.Ecsape {
         public Pool(int size) {
             data = new T[size];
             entities = new int[size];
-            Info = Component<T>.AsComponentInfo();
+            Info = Component<T>.AsComponentType();
             count = 1;
             self = this;
         }
@@ -310,6 +287,9 @@ namespace Wargon.Ecsape {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Set(in T component, int entity) {
             data[entities[entity]] = component;
+        }
+        public void SetBoxed(object component, int entity) {
+            data[entities[entity]] = (T)component;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(int entity) {
@@ -347,9 +327,9 @@ namespace Wargon.Ecsape {
             Array.Resize(ref entities, newSize);
         }
 
-        public ComponentInfo Info { get; }
+        public ComponentType Info { get; }
 
-        IComponent IPool.GetRaw(int index) {
+        object IPool.GetRaw(int index) {
             return Get(index);
         }
 
@@ -375,7 +355,7 @@ namespace Wargon.Ecsape {
         public DisposablePool(int size) {
             data = new T[size];
             entities = new int[size];
-            Info = Component<T>.AsComponentInfo();
+            Info = Component<T>.AsComponentType();
             count = 1;
             self = this;
         }
@@ -390,6 +370,9 @@ namespace Wargon.Ecsape {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Set(in T component, int entity) {
             data[entities[entity]] = component;
+        }
+        public void SetBoxed(object component, int entity) {
+            data[entities[entity]] = (T)component;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(int entity) {
@@ -429,9 +412,9 @@ namespace Wargon.Ecsape {
             Array.Resize(ref entities, newSize);
         }
 
-        public ComponentInfo Info { get; }
+        public ComponentType Info { get; }
 
-        IComponent IPool.GetRaw(int index) {
+        object IPool.GetRaw(int index) {
             return Get(index);
         }
         public T[] GetRawData() {
@@ -667,6 +650,10 @@ namespace Wargon.Ecsape {
                         var componentTypeIndex = Component.GetIndex(poolType);
                         fieldInfo.SetValue(system, world.GetPoolByIndex(componentTypeIndex));
                     }
+
+                    if (fieldInfo.FieldType == typeof(World)) {
+                        fieldInfo.SetValue(system, world);
+                    }
                 }
             }
         }
@@ -822,6 +809,7 @@ namespace Wargon.Ecsape {
     public unsafe struct UnsafeDelegate<T> {
         private delegate*<T,void>* delegates;
         private int subbed;
+        public int Count => subbed;
         private int capacity;
         public void Sub(delegate*<T,void> action) {
             UnsafeHelp.AssertSize(ref delegates, ref capacity, subbed);
@@ -916,7 +904,6 @@ namespace Wargon.Ecsape {
             query = world.GetQuery()
                 .With<Translation>()
                 .With<Components.TransformReference>()
-                .With<Active>()
                 .Without<StaticTag>();
         }
 

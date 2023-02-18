@@ -1,13 +1,17 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
+using Wargon.Ecsape.Components;
 using Object = UnityEngine.Object;
 
 namespace Wargon.Ecsape
 {
     public class EntityLink : MonoBehaviour, IEntityLink {
         public bool linked;
-        [SerializeField] private ConvertOption option;
+        public ConvertOption option;
         private Entity entity;
         public ref Entity Entity => ref entity;
+        [SerializeReference] public List<object> Components = new();
         private void Start() {
             if(linked) return;
 
@@ -18,8 +22,20 @@ namespace Wargon.Ecsape
         public void Link(ref Entity entity) {
             this.entity = entity;
             var links = GetComponents<IComponentLink>();
+
+
             foreach (var linkComponent in links) {
                 linkComponent.Link(ref entity);
+            }
+
+            foreach (var component in Components) {
+                entity.AddBoxed(component);
+            }
+            
+            entity.Add(new View{GameObject = gameObject});
+            if (!entity.Has<TransformReference>()) {
+                entity.Add(new TransformReference{value = transform});
+                entity.Add(new Translation{position = transform.position, rotation = transform.rotation, scale = transform.localScale});
             }
             switch (option) {
                 case ConvertOption.Destroy:
@@ -46,7 +62,12 @@ namespace Wargon.Ecsape
                 }
         }
     }
-
+    public struct View : IComponent, IDisposable {
+        public GameObject GameObject;
+        public void Dispose() {
+            Object.Destroy(GameObject);
+        }
+    }
     public enum ConvertOption {
         Destroy,
         DestroyComponents,
@@ -60,6 +81,7 @@ namespace Wargon.Ecsape
 
     public interface IComponentLink {
         void Destroy();
+        ComponentType ComponentType { get; }
         void Link(ref Entity entity);
     }
     
@@ -67,11 +89,13 @@ namespace Wargon.Ecsape
         public void Destroy() {
             Destroy(this);
         }
+        public abstract ComponentType ComponentType { get; }
         public abstract void Link(ref Entity entity);
     }
     
     public abstract class ComponentLink<T> : ComponentLink where T : struct, IComponent {
         public T value;
+        public override ComponentType ComponentType  => Component<T>.AsComponentType();
         public override void Link(ref Entity entiy) {
             entiy.Add(value);
         }
@@ -88,11 +112,7 @@ namespace Wargon.Ecsape
         public void OnCreate(World world) {
             _gameObjects = world.GetQuery().With<GameObjectSpawnedEvent>();
             _pool = world.GetPool<GameObjectSpawnedEvent>();
-            
-            foreach (var monoLink in Object.FindObjectsOfType<EntityView>()) {
-                var e = world.CreateEntity();
-                monoLink.Link(ref e);
-            }
+
             // foreach (var monoLink in Object.FindObjectsOfType<EntityLink>()) {
             //     var e = world.CreateEntity();
             //     monoLink.Link(ref e);

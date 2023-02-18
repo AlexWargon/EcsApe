@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 
@@ -15,6 +16,15 @@ namespace Wargon.Ecsape {
             list.RemoveAt(list.Count - 1);
         }
 
+        public static bool ConstainsType(this List<object> list, object item) {
+            var type = item.GetType();
+            for (var i = 0; i < list.Count; i++) {
+                if (list[i].GetType() == type) return true;
+                
+            }
+
+            return false;
+        }
         public static IntEnumerator GetEnumerator(this Range range) {
             return new IntEnumerator(range);
         }

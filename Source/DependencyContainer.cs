@@ -12,13 +12,13 @@ namespace Wargon.Ecsape {
         }
 
         public IDependencyContext Register<T>() where T : class {
-            var context = new DependencyContext();
+            var context = new DependencyContext(this);
             constexts.Add(typeof(T), context);
             return context;
         }
 
         public IDependencyContext Register<T>(T item) where T : class {
-            var context = new DependencyContext();
+            var context = new DependencyContext(this);
             constexts.Add(typeof(T), context);
             constexts[typeof(T)].From(item);
             return context;
@@ -57,13 +57,19 @@ namespace Wargon.Ecsape {
 
     public class DependencyContext : IDependencyContext {
         private object instance;
+        private IDependencyContainer container;
 
+        internal DependencyContext(IDependencyContainer container) {
+            this.container = container;
+        }
         IDependencyContext IDependencyContext.From<T>() {
             instance = Activator.CreateInstance(typeof(T));
+            container.Build(instance);
             return this;
         }
         IDependencyContext IDependencyContext.From<T>(T instanceSource) {
             instance = instanceSource;
+            container.Build(instance);
             return this;
         }
 
