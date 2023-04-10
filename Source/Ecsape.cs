@@ -154,10 +154,11 @@ namespace Wargon.Ecsape {
             ComponentType Info { get; }
             void Add(int entity);
             void AddBoxed(object component, int entity);
+            unsafe void AddPtr(void* component, int entity);
             void SetBoxed(object component, int entity);
             void Remove(int entity);
             bool Has(int entity);
-
+            
             static IPool New(int size, int typeIndex) {
                 var info = Component.GetComponentType(typeIndex);
                 var componentType = Component.GetTypeOfComponent(typeIndex);
@@ -173,24 +174,24 @@ namespace Wargon.Ecsape {
     }
 
 
-    public interface IPool<T> : Pools.IPool where T : struct, IComponent {
+    public interface IPool<T> : IPool where T : struct, IComponent {
         ref T Get(int entity);
         ref T Get(ref Entity entity);
         void Set(in T component, int entity);
         void Add(in T component, int entity);
-        T[] GetRawData();
-        int[] GetRawEntities();
+        ref T[] GetRawData();
+        ref int[] GetRawEntities();
     }
 
     internal class TagPool<T> : IPool<T> where T : struct, IComponent {
         private readonly IPool self;
         private int count;
-        private T data;
+        private T[] data;
         private int[] entities;
         public int Capacity => entities.Length;
         public int Count => count - 1;
         public TagPool(int size) {
-            data = default;
+            data = new T[1];
             entities = new int[size];
             Info = Component<T>.AsComponentType();
             count = 1;
@@ -198,17 +199,17 @@ namespace Wargon.Ecsape {
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T Get(int entity) {
-            return ref data;
+            return ref data[0];
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T Get(ref Entity entity) {
-            return ref data;
+            return ref data[0];
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Set(in T component, int entity) { }
 
         public void SetBoxed(object component, int entity) {
-            data = (T) component;
+            data[0] = (T) component;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(int entity) {
@@ -218,22 +219,27 @@ namespace Wargon.Ecsape {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(in T component, int entity) {
             entities[entity] = count;
-            data = component;
+            data[0] = component;
             count++;
         }
-
-        public T[] GetRawData() {
-            return new[] {data};
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public unsafe void AddPtr(void* component, int entity) {
+            entities[entity] = count;
+            data[0] = Marshal.PtrToStructure<T>((IntPtr)component);
+            count++;
+        }
+        public ref T[] GetRawData() {
+            return ref data;
         }
 
-        public int[] GetRawEntities() {
-            return entities;
+        public ref int[] GetRawEntities() {
+            return ref entities;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void AddBoxed(object component, int entity) {
             entities[entity] = count;
-            data = (T)component;
+            data[0] = (T)component;
             count++;
         }
 
@@ -313,6 +319,14 @@ namespace Wargon.Ecsape {
             data[count] = (T)component;
             count++;
         }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public unsafe void AddPtr(void* component, int entity) {
+            if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
+            entities[entity] = count;
+            data[count] = Marshal.PtrToStructure<T>((IntPtr)component);
+            count++;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Remove(int entity) {
             entities[entity] = 0;
             count--;
@@ -332,13 +346,13 @@ namespace Wargon.Ecsape {
         object IPool.GetRaw(int index) {
             return Get(index);
         }
-
-        public T[] GetRawData() {
-            return data;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ref T[] GetRawData() {
+            return ref data;
         }
-
-        public int[] GetRawEntities() {
-            return entities;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ref int[] GetRawEntities() {
+            return ref entities;
         }
 
         public IPool AsIPool() {
@@ -395,7 +409,15 @@ namespace Wargon.Ecsape {
             data[count] = (T)component;
             count++;
         }
-
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public unsafe void AddPtr(void* component, int entity) {
+            if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
+            entities[entity] = count;
+            data[count] = Marshal.PtrToStructure<T>((IntPtr)component);;
+            count++;
+        }
+        
         public void Remove(int entity) {
             data[entities[entity]].Dispose();
             entities[entity] = 0;
@@ -417,12 +439,12 @@ namespace Wargon.Ecsape {
         object IPool.GetRaw(int index) {
             return Get(index);
         }
-        public T[] GetRawData() {
-            return data;
+        public ref T[] GetRawData() {
+            return ref data;
         }
 
-        public int[] GetRawEntities() {
-            return entities;
+        public ref int[] GetRawEntities() {
+            return ref entities;
         }
 
         public IPool AsIPool() {
@@ -494,12 +516,13 @@ namespace Wargon.Ecsape {
     /// <summary>
     ///     Event will be cleared before this system
     /// </summary>
-    public interface IEventSystem<T> : IEventSystem where T : struct, IComponent { }
+    public interface IClearBeforeUpdate<T> : IEventSystem where T : struct, IComponent { }
     /// <summary>
     ///     Execute every frame
     /// </summary>
     public interface ISystem {
         void OnCreate(World world); // ReSharper disable Unity.PerformanceAnalysis
+        /// <param name="deltaTime"> time in ms between frames</param>
         void OnUpdate(float deltaTime); // ReSharper disable Unity.PerformanceAnalysis
     }
 
@@ -588,6 +611,19 @@ namespace Wargon.Ecsape {
         }
     }
 
+    internal class CmdBufferSystem : ISystem {
+        private CommandBuffer cmd;
+        private World _world;
+        public void OnCreate(World world) {
+            cmd = world.GetBuffer();
+            UnityEngine.Debug.Log("CMD SYSTEM ADDED");
+        }
+
+        public void OnUpdate(float deltaTime) {
+            cmd.Execute(_world);
+        }
+    }
+
     public sealed class Systems {
         private readonly DefaultSystems defaultSystems;
         private readonly List<Group> groups;
@@ -610,7 +646,7 @@ namespace Wargon.Ecsape {
 
         private void IfIsEventSystemAddClearSystem<T>(T eventSystem) where T: ISystem {
             if (IsEventSystem(eventSystem)) {
-                var type = GetGenericType(eventSystem.GetType(), typeof(IEventSystem<>));
+                var type = GetGenericType(eventSystem.GetType(), typeof(IClearBeforeUpdate<>));
                 AddSystem(CreateClearEventSystem(type));
             }
         }
@@ -696,6 +732,7 @@ namespace Wargon.Ecsape {
         public Systems Add<T>() where T : class, ISystem, new() {
             var system = new T();
             IfIsEventSystemAddClearSystem(system);
+            
             AddSystem(system);
             return this;
         }
@@ -709,9 +746,15 @@ namespace Wargon.Ecsape {
         private void AddSystem(ISystem system) {
             if (updatesCount >= updates.Length - 1) Array.Resize(ref updates, updates.Length << 1);
             system.OnCreate(world);
+            if (world.bufferGetten) {
+                var cmdsystem = new CmdBufferSystem();
+                cmdsystem.OnCreate(world);
+                updates[updatesCount] = cmdsystem;
+                updatesCount++;
+                world.bufferGetten = false;
+            }
             updates[updatesCount] = system;
             updatesCount++;
-            //Debug.Log($"  system {system.GetType()} Added");
         }
 
         public Systems AddReactive<T>() where T : class, IOnAdd, ISystem, new() {
@@ -779,6 +822,11 @@ namespace Wargon.Ecsape {
         public UnityEngine.Vector3 position;
         public UnityEngine.Quaternion rotation;
         public UnityEngine.Vector3 scale;
+
+        public UnityEngine.Vector3 right {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => rotation * UnityEngine.Vector3.right;
+        }
     }
 
     public struct StaticTag : IComponent { }

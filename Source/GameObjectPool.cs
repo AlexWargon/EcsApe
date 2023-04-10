@@ -21,13 +21,10 @@ namespace Wargon.Ecsape {
         }
     }
     [Serializable]
-    public struct Pooled : IComponent, IDisposable {
+    public struct Pooled : IComponent {
         public int id;
-        public EntityLink view;
         public float lifeTime;
-        public void Dispose() {
-            Object.Destroy(view.gameObject);
-        }
+        public float lifeTimeDefault;
     }
 
     public sealed class MyObjectPool : IObjectPool {
@@ -89,12 +86,11 @@ namespace Wargon.Ecsape {
             public T Spawn() {
                 if(buffer.Count == 0) AddSize(16);
                 var e = buffer.Dequeue();
-                // if (e.gameObject.activeInHierarchy) {
-                //     buffer.Enqueue(e);
-                //     AddSize(16);
-                //     return Spawn();
-                // }
-                
+                if (e.gameObject.activeInHierarchy) {
+                    buffer.Enqueue(e);
+                    AddSize(16);
+                    return Spawn();
+                }
                 onSpawn(e);
                 return e;
             }
@@ -119,10 +115,9 @@ namespace Wargon.Ecsape {
                 e.Get<Translation>().position = position;
                 e.Remove<StaticTag>();
                 ref var pooled = ref e.Get<Pooled>();
-                pooled.lifeTime = 1f;
+                pooled.lifeTime = pooled.lifeTimeDefault;
                 pooled.id = id;
-                pooled.view = x;
-                
+                e.Get<ViewLink>().Link = x;
                 return x;
             }
 
@@ -219,10 +214,9 @@ namespace Wargon.Ecsape {
                 translation.position = position;
                 e.Remove<StaticTag>();
                 ref var pooled = ref e.Get<Pooled>();
-                pooled.lifeTime = 1f;
+                pooled.lifeTime = pooled.lifeTimeDefault;
                 pooled.id = id;
-                pooled.view = x;
-                
+                e.Get<ViewLink>().Link = x;
                 return x;
             }
             
@@ -266,7 +260,6 @@ namespace Wargon.Ecsape {
                 view.Entity.Add<StaticTag>();
                 view.gameObject.SetActive(false);
                 pool.Release(view);
-                
             }
         }
     }

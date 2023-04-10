@@ -4,6 +4,7 @@ namespace Wargon.Ecsape
 {
     public class CollisionEmitter : MonoBehaviour, IComponentLink {
         private Entity entity;
+        public LayerMask targets;
         private void OnTriggerEnter2D(Collider2D other) {
             if (other.gameObject.TryGetComponent(out IEntityLink link)) {
                 World.Default.CreateEntity().Add(new OnTriggerEnter {
@@ -31,7 +32,7 @@ namespace Wargon.Ecsape
     public struct CollidedWith : IComponent {
         public Entity entity;
     }
-    public sealed class OnTriggerSystem : ISystem, IEventSystem<CollidedWith> {
+    public sealed class OnTriggerSystem : ISystem, IClearBeforeUpdate<CollidedWith> {
         private Query query;
         private IPool<OnTriggerEnter> pool;
         public void OnCreate(World world) {

@@ -1,10 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-
-namespace Wargon.Ecsape {
+﻿namespace Wargon.Ecsape {
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Runtime.CompilerServices;
+    using System.Runtime.InteropServices;
+    
     internal class ArrayList<T> {
         private T[] buffer;
         public int capacity;
@@ -43,47 +43,6 @@ namespace Wargon.Ecsape {
         }
     }
 
-    internal struct archetypes {
-        private unsafe archetype* map;
-    }
-    internal struct archetype {
-        internal unsafe int* mask;
-        internal int queriesCount;
-        private archetype_edges _edges;
-        public int id;
-        
-        public unsafe archetype(int* maskSource, int id) {
-            mask = maskSource;
-            queriesCount = 0;
-            _edges = new archetype_edges();
-            this.id = id;
-        }
-
-        public void AddEntity(int entity) {
-            _edges.Execute(entity);    
-        }
-    }
-
-    internal struct archetype {
-        
-    }
-    internal struct archetype_edges {
-        public int index;
-        private UnsafeDelegate<int> toAdd;
-        private UnsafeDelegate<int> toRemove;
-
-        public archetype_edges(int idx) {
-            index = idx;
-            toAdd = new UnsafeDelegate<int>(3);
-            toRemove = new UnsafeDelegate<int>(3);
-        }
-
-        public void Execute(int entity) {
-            toRemove.Invoke(entity);
-            toAdd.Invoke(entity);
-        }
-        
-    }
     public sealed class Archetype {
         public readonly int id;
         internal readonly HashSet<int> hashMask;
@@ -325,7 +284,7 @@ namespace Wargon.Ecsape {
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int GetCustomHashCode(ref Span<int> mask) {
+        internal static int GetCustomHashCode(ref Span<int> mask) {
             unchecked {
                 const int p = 16777619;
                 var hash = (int) 2166136261;
@@ -532,21 +491,26 @@ namespace Wargon.Ecsape {
             }
         }
 
-        internal struct IntKey : IEquatable<IntKey> {
-            internal int value;
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public bool Equals(IntKey other) {
-                return other.value == value;
-            }
+    }
+    
+    internal struct IntKey : IEquatable<IntKey> {
+        internal int value;
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public override int GetHashCode() {
-                return value;
-            }
+        public IntKey(int key) {
+            value = key;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool Equals(IntKey other) {
+            return other.value == value;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override int GetHashCode() {
+            return value;
         }
     }
-
+    
     public static class QueryExtensions {
         public static Query Without<T>(this Query query) where T : struct, IComponent {
             query.without.Add(Component<T>.Index);
@@ -571,14 +535,49 @@ namespace Wargon.Ecsape {
         }
     }
 
-    public class Query {
+    public unsafe class WrappedNativeArray<T> where T : unmanaged {
+        private T* ptr;
+        private T[] array;
+        private int len;
+
+        public T this[int index] {
+            get => ptr[index];
+            set => ptr[index] = value;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public WrappedNativeArray(int size) {
+            array = new T[size];
+            fixed (T* arrayPtr = array) {
+                ptr = arrayPtr;
+            }
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Resize(int newSize) {
+            len = newSize;
+            Array.Resize(ref array, len);
+            fixed (T* arrayPtr = array) {
+                ptr = arrayPtr;
+            }
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Resize() {
+            len += 16;
+            Array.Resize(ref array, len);
+            fixed (T* arrayPtr = array) {
+                ptr = arrayPtr;
+            }
+        }
+    }
+    public sealed class Query {
         internal int count;
         internal int[] entities;
         internal int[] entityMap;
+        internal unsafe int* entitiesPtr;
+        internal unsafe int* entityMapPtr;
+        
         internal int entityToUpdateCount;
         internal EntityToUpdate[] entityToUpdates;
         internal int Index;
-
         internal int indexInside;
         internal bool IsDirty;
         internal Mask with;
@@ -593,17 +592,23 @@ namespace Wargon.Ecsape {
             entityToUpdates = new EntityToUpdate[256];
             Index = world.QueriesCount;
             count = 0;
+            unsafe {
+                entitiesPtr = entities.GetPtr();
+                entityMapPtr = entityMap.GetPtr();
+            }
         }
 
-        // public int Count {
-        //     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        //     get => count;
-        // }
+        internal World WorldInternal;
 
-        internal World WorldInternal { get; }
+        public int FullSize {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get=> entities.Length;
+        }
 
-        public int FullSize => entities.Length;
-
+        public int Count {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => count;
+        }
         public bool IsEmpty {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => count == 0;
@@ -631,6 +636,13 @@ namespace Wargon.Ecsape {
             return (entities, entityMap, entityToUpdates, count);
         }
 
+        internal unsafe int* GetEntitiesPtr() {
+            return entitiesPtr;
+        }
+
+        internal unsafe int* GetEntitiesMapPtr() {
+            return entityMapPtr;
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void OnAddWith(int entity) {
             if (entityToUpdates.Length <= entityToUpdateCount)
@@ -661,7 +673,7 @@ namespace Wargon.Ecsape {
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void Remove(int entity) {
+        private void Remove(int entity) {
             if (!Has(entity)) return;
             var index = entityMap[entity] - 1;
             entityMap[entity] = 0;
@@ -673,9 +685,20 @@ namespace Wargon.Ecsape {
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void Add(int entity) {
-            if (entities.Length - 1 <= count) Array.Resize(ref entities, count + 16);
-            if (entityMap.Length - 1 <= entity) Array.Resize(ref entityMap, entity + 16);
+        private void Add(int entity) {
+            if (entities.Length - 1 <= count) {
+                Array.Resize(ref entities, count + 16);
+                unsafe {
+                    entitiesPtr = entities.GetPtr();
+                }
+            }
+
+            if (entityMap.Length - 1 <= entity) {
+                Array.Resize(ref entityMap, entity + 16);
+                unsafe {
+                    entityMapPtr = entityMap.GetPtr();
+                }
+            }
             if (Has(entity)) return;
             entities[count++] = entity;
             entityMap[entity] = count;
@@ -734,7 +757,7 @@ namespace Wargon.Ecsape {
             index++;
             return index < query.count;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Reset() {
             index = -1;
         }
@@ -769,7 +792,7 @@ namespace Wargon.Ecsape {
             Count = 0;
             foreach (var i in set) Types[Count++] = i;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(int type) {
             Types[Count] = type;
             Count++;

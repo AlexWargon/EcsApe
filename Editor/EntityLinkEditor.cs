@@ -114,16 +114,25 @@ namespace Wargon.Ecsape.Editor {
                 if (archetypeCurrent != archetypePrevious) componentsRoot.Clear();
                 componentsCache = archetype.GetComponents(in e);
                 foreach (var component in componentsCache) {
+                    if (component == null) {
+                        entityLink.Components.Remove(component);
+                        continue;
+                    }
                     var inspector = ComponentInspectors.Get(component.GetType());
-                    inspector.Draw(component, componentsRoot, e);
+                    inspector.DrawRunTime(component, componentsRoot, e);
                 }
 
                 archetypePrevious = archetypeCurrent;
             }
             else {
-                foreach (var component in entityLink.Components)
+                foreach (var component in entityLink.Components) {
+                    if (component == null) {
+                        entityLink.Components.Remove(component);
+                        continue;
+                    }
                     ComponentInspectors.Get(component.GetType())
-                        .Draw(component, componentsRoot, entityLink, entityLink.Components);
+                        .DrawEditor(component, componentsRoot, entityLink, entityLink.Components);
+                }
             }
         }
     }

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -25,7 +26,7 @@ namespace Wargon.Ecsape {
             Add<Quaternion>(new QuaternionInspector().Create());
             Add<bool>(new BoolInspector().Create());
             Add<AnimationCurve>(new CurveInspector().Create());
-            
+            Add<LayerMask>(new LayerMaskInspector().Create());
             inited = true;
         }
 
@@ -96,16 +97,18 @@ namespace Wargon.Ecsape {
         protected string fieldName = "field";
 
         private bool initialized;
-        protected Func<object, object> onChange;
+        protected Func<object, ValueTask<object>> onChange;
         private VisualElement previousRoot;
         private bool runtimeMode;
         private object target;
-        private Object targetObject;
+        private Object targetLink;
+        private const float updateDelay = 0.2f;
+        private float updateDelayCounter;
         protected abstract VisualElement GetField();
 
         private void SetTarget(object component, Object targetObj) {
             target = component;
-            targetObject = targetObj;
+            targetLink = targetObj;
         }
 
         private void AddToRoot(VisualElement root) {
@@ -119,25 +122,46 @@ namespace Wargon.Ecsape {
             }
         }
 
-        public void Init(object obj, Object targetObj, FieldInfo fieldInfo, string fName, VisualElement root) {
+        public async void UpdateData(object component, Object link, FieldInfo fieldInfo, string fieldNameParam, VisualElement root, bool runTime) {
             if (root == previousRoot) return;
             if (initialized) return;
             AddToRoot(root);
-            SetTarget(obj, targetObj);
-            fieldName = fName;
-            onChange = x => {
+            SetTarget(component, link);
+            this.fieldName = fieldNameParam;
+            onChange = async (x) => {
+                ticksCounter = 0;
                 data = x;
                 fieldInfo.SetValue(target, data);
-                if (targetObject != null) EditorUtility.SetDirty(targetObject);
+                if (targetLink != null) {
+                    //EditorUtility.SetDirty(targetLink);
+                    await SetDirtyAsync(targetLink);
+                }
                 if (runtimeMode)
                     entity.SetBoxed(target);
                 return data;
             };
-            if (data != null)
-                OnDraw(data, false, fieldInfo.FieldType);
+            if (data != null) {
+                if(runTime)
+                    OnDraw(data, runTime, fieldInfo.FieldType);
+            }
             initialized = true;
         }
 
+        private int ticks = 60;
+        protected int ticksCounter;
+        private Action onUpdate;
+        private void Update() {
+            ticksCounter++;
+            if (ticksCounter == ticks) {
+                onUpdate?.Invoke();
+                ticksCounter = 0;
+            }
+        }
+        static async ValueTask SetDirtyAsync(Object obj) {
+            await Task.Delay(200);
+            EditorUtility.SetDirty(obj);
+            Debug.Log(200);
+        }
         protected abstract void OnDraw(object value, bool runTime, Type targetType);
 
         public void Draw(object value, string fName, bool runTime, Type targetType, Entity e) {
@@ -351,6 +375,26 @@ namespace Wargon.Ecsape {
             field = new CurveField(fieldName);
 
             field.value = null;
+            field.RegisterValueChangedCallback(x => { onChange?.Invoke(x.newValue); });
+        }
+    }
+    
+    public class LayerMaskInspector : BaseInspector {
+        private LayerMaskField field;
+
+        protected override VisualElement GetField() {
+            return field;
+        }
+
+        protected override void OnDraw(object value, bool runTime, Type targetType) {
+            field.label = fieldName;
+            field.SetValueWithoutNotify((LayerMask) value);
+        }
+
+        protected override void OnCreate() {
+            field = new LayerMaskField(fieldName);
+
+            field.value = default;
             field.RegisterValueChangedCallback(x => { onChange?.Invoke(x.newValue); });
         }
     }

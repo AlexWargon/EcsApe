@@ -95,34 +95,12 @@ namespace Wargon.Ecsape {
         public Query GetQuery<T>() where T : struct, IComponent {
             return GetQuery().With<T>();
         }
-        
-        public Query GetQuery<T1,T2>() 
-            where T1 : struct, IComponent  
-            where T2 : struct, IComponent 
-        {
-            return GetQuery().With<T1>().With<T2>();
-        }
-        
-        public Query GetQuery<T1,T2,T3>() 
-            where T1 : struct, IComponent  
-            where T2 : struct, IComponent  
-            where T3 : struct, IComponent  
-        {
-            return GetQuery().With<T1>().With<T2>().With<T3>();
-        }
-        public Query GetQuery<T1,T2,T3,T4>() 
-            where T1 : struct, IComponent  
-            where T2 : struct, IComponent  
-            where T3 : struct, IComponent
-            where T4 : struct, IComponent
-        {
-            return GetQuery().With<T1>().With<T2>().With<T3>().With<T4>();
-        }
+
         internal Query GetQueryInternal(int index) {
             return queries[index];
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Entity CreateEntity() {
+        public unsafe Entity CreateEntity() {
 
             Entity entity;
             if (freeEntities.Count > 0) {
@@ -141,6 +119,7 @@ namespace Wargon.Ecsape {
             }
             entity.Index = lastEntity;
             entity.WorldIndex = selfIndex;
+            //entity.WorldNative = Native;
             entities[lastEntity] = entity;
             entityComponentsAmounts[entity.Index] = 0;
             lastEntity++;
@@ -257,7 +236,7 @@ namespace Wargon.Ecsape {
 
         public int PoolsCountInternal() => poolsCount;
 
-        public Entity[] EntitiesInternal() => entities;
+        public ref Entity[] EntitiesInternal() => ref entities;
 
         public int ComponentsCountInternal(Entity entity) {
             return entityComponentsAmounts[entity.Index];
@@ -350,7 +329,7 @@ namespace Wargon.Ecsape {
             return e;
         }
     }
-
+    
     public partial class World {
         public const string DEFAULT = "Default";
         public static int ENTITIES_CACHE = 256;
@@ -409,5 +388,95 @@ namespace Wargon.Ecsape {
             }
         }
 
+        internal bool bufferGetten = false;
+        private bool bufferCreated;
+        internal CommandBuffer _buffer;
+        public ref CommandBuffer GetBuffer() {
+            bufferGetten = true;
+            if (!bufferCreated) {
+                _buffer = new CommandBuffer(10000);
+                bufferCreated = true;
+            }
+            return ref _buffer;
+        }
+        internal ref CommandBuffer GetBufferInternal() {
+            if (!bufferCreated) {
+                _buffer = new CommandBuffer(10000);
+                bufferCreated = true;
+            }
+            return ref _buffer;
+        }
+
+        internal unsafe WorldNative* native;
+
+        internal unsafe WorldNative* Native {
+            get {
+                if (native == null) {
+                    var bfr = GetBufferInternal();
+                    fixed (Entity* ent = entities) {
+                        var worldNative = new WorldNative{
+                            Buffer = &bfr,
+                            Entities = ent
+                        };
+                        this.native = &worldNative;
+                    }
+                }
+                return native;
+            }
+        }
+    }
+
+    public unsafe struct WorldNative {
+        public CommandBuffer* Buffer;
+        public Entity* Entities;
+        
+        public ref Entity GetEntity(int index) {
+            return ref Entities[index];
+        }
+    }
+    public static class WorldExtensions {
+        internal static Dictionary<IntKey, Query> Queries = new Dictionary<IntKey, Query>();
+        public static Query GetQuery<T1>(this World world) where T1 : struct, IComponent {
+            var key = new IntKey(Component<T1>.Index);
+            if (!HasKey(key)) {
+                var q = new Query(world).With<T1>();
+                Queries.Add(key, q);
+                return q;
+            }
+
+            return Queries[key];
+        }
+
+        public static Query GetQuery<T1, T2>(this World world) 
+            where T1 : struct, IComponent 
+            where T2 : struct, IComponent 
+        {
+            Span<int> hash = stackalloc int[2] {Component<T1>.Index, Component<T2>.Index};
+            var key = new IntKey(Migrations.GetCustomHashCode(ref hash));
+            if (!HasKey(key)) {
+                var q = new Query(world).With<T1>().With<T2>();
+                Queries.Add(key, q);
+                return q;
+            }
+            return Queries[key];
+        }
+        public static Query GetQuery<T1, T2, T3>(this World world) 
+            where T1 : struct, IComponent 
+            where T2 : struct, IComponent 
+            where T3 : struct, IComponent 
+        {
+            Span<int> hash = stackalloc int[3] {Component<T1>.Index, Component<T2>.Index, Component<T2>.Index };
+            var key = new IntKey(Migrations.GetCustomHashCode(ref hash));
+            if (!HasKey(key)) {
+                var q = new Query(world).With<T1>().With<T2>().With<T3>();
+                Queries.Add(key, q);
+                return q;
+            }
+            return Queries[key];
+        }
+        
+        private static bool HasKey(in IntKey key) {
+            return Queries.ContainsKey(key);
+        }
     }
 }

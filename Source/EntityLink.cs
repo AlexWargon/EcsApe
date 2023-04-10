@@ -21,33 +21,34 @@ namespace Wargon.Ecsape
 
         public void Link(ref Entity entity) {
             this.entity = entity;
-            var links = GetComponents<IComponentLink>();
-
-
-            foreach (var linkComponent in links) {
-                linkComponent.Link(ref entity);
-            }
+            // var links = GetComponents<IComponentLink>();
+            //
+            //
+            // foreach (var linkComponent in links) {
+            //     linkComponent.Link(ref entity);
+            // }
 
             foreach (var component in Components) {
                 entity.AddBoxed(component);
             }
             
             entity.Add(new View{GameObject = gameObject});
+            entity.Add(new ViewLink{Link = this});
             if (!entity.Has<TransformReference>()) {
                 entity.Add(new TransformReference{value = transform});
                 entity.Add(new Translation{position = transform.position, rotation = transform.rotation, scale = transform.localScale});
             }
             switch (option) {
                 case ConvertOption.Destroy:
-                    foreach (var linkComponent in links) {
-                        linkComponent.Destroy();
-                    }
+                    // foreach (var linkComponent in links) {
+                    //     linkComponent.Destroy();
+                    // }
                     Destroy(this);
                     break;
                 case ConvertOption.DestroyComponents:
-                    foreach (var linkComponent in links) {
-                        linkComponent.Destroy();
-                    }
+                    // foreach (var linkComponent in links) {
+                    //     linkComponent.Destroy();
+                    // }
                     break;
                 case ConvertOption.Stay:
                     break;
@@ -67,6 +68,10 @@ namespace Wargon.Ecsape
         public void Dispose() {
             Object.Destroy(GameObject);
         }
+    }
+
+    public struct ViewLink : IComponent {
+        public EntityLink Link;
     }
     public enum ConvertOption {
         Destroy,

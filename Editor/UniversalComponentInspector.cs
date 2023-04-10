@@ -52,7 +52,7 @@ namespace Wargon.Ecsape {
             remove.clickable.clicked += () => _onClickRemove.Invoke();
         }
 
-        public void Draw(object component, VisualElement root, Object target, IList collection) {
+        public void DrawEditor(object component, VisualElement root, Object target, IList collection) {
             CheckRoot(root);
             var type = component.GetType();
             var typeInfos = type.GetFields();
@@ -65,11 +65,11 @@ namespace Wargon.Ecsape {
             
             foreach (var fieldInfo in typeInfos) {
                 if (!_inspectors.TryGetValue(fieldInfo.Name, out var inspector)) continue;
-                inspector.Init(component,target, fieldInfo ,fieldInfo.Name, _children);
+                inspector.UpdateData(component,target, fieldInfo ,fieldInfo.Name, _children, false);
                 inspector.Draw(fieldInfo.GetValue(component), fieldInfo.Name,false, fieldInfo.FieldType, default);
             }
         }
-        public void Draw(object component, VisualElement root, Entity entity) {
+        public void DrawRunTime(object component, VisualElement root, Entity entity) {
             CheckRoot(root);
             var type = component.GetType();
             var fields = type.GetFields();
@@ -80,7 +80,7 @@ namespace Wargon.Ecsape {
             };
             foreach (var fieldInfo in fields) {
                 if (!_inspectors.TryGetValue(fieldInfo.Name, out var inspector)) continue;
-                inspector.Init(component,null, fieldInfo ,name, _children);
+                inspector.UpdateData(component,null, fieldInfo ,name, _children, true);
                 inspector.Draw(fieldInfo.GetValue(component), fieldInfo.Name,true, fieldInfo.FieldType, entity);
             }
         }
