@@ -964,7 +964,6 @@ namespace Wargon.Ecsape {
                 transform.value.rotation = translation.rotation;
                 transform.value.localScale = translation.scale;
             }
-            //Debug.Log(_query.Count);
         }
     }
 }

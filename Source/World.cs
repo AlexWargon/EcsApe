@@ -328,6 +328,19 @@ namespace Wargon.Ecsape {
             archetype.AddEntity(e.Index);
             return e;
         }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Entity CreateEntity(ref List<int> hash)
+        {
+            var e = CreateEntity();
+            var archetype = GetArchetype(hash.ToArray());
+            ref var archetypeId = ref GetArchetypeId(e.Index);
+            archetypeId = archetype.id;
+            foreach (var i in hash) {
+                GetPoolByIndex(i).Add(e.Index);
+            }
+            archetype.AddEntity(e.Index);
+            return e;
+        }
     }
     
     public partial class World {
