@@ -577,12 +577,14 @@
         
         internal int entityToUpdateCount;
         internal EntityToUpdate[] entityToUpdates;
+        
         internal int Index;
         internal int indexInside;
-        internal bool IsDirty;
+        
         internal Mask with;
         internal Mask without;
-
+        
+        internal bool IsDirty;
         public Query(World world) {
             WorldInternal = world;
             entities = new int[256];

@@ -536,7 +536,6 @@ namespace Wargon.Ecsape {
 
         public void OnUpdate(float deltaTime) {
             if (query.IsEmpty) return;
-            //Debug.Log($"{typeof(T).Name} cleared {pool.Count} times");
             foreach (ref var entity in query) {
                 entity.Remove<T>();
             }
@@ -611,7 +610,7 @@ namespace Wargon.Ecsape {
         }
     }
 
-    internal class CmdBufferSystem : ISystem {
+    internal class EntityCommandBufferSystem : ISystem {
         private CommandBuffer cmd;
         private World _world;
         public void OnCreate(World world) {
@@ -746,15 +745,17 @@ namespace Wargon.Ecsape {
         private void AddSystem(ISystem system) {
             if (updatesCount >= updates.Length - 1) Array.Resize(ref updates, updates.Length << 1);
             system.OnCreate(world);
+
+            updates[updatesCount] = system;
+            updatesCount++;
+            
             if (world.bufferGetten) {
-                var cmdsystem = new CmdBufferSystem();
+                var cmdsystem = new EntityCommandBufferSystem();
                 cmdsystem.OnCreate(world);
                 updates[updatesCount] = cmdsystem;
                 updatesCount++;
                 world.bufferGetten = false;
             }
-            updates[updatesCount] = system;
-            updatesCount++;
         }
 
         public Systems AddReactive<T>() where T : class, IOnAdd, ISystem, new() {
