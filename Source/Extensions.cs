@@ -1,6 +1,7 @@
-﻿namespace Wargon.Ecsape {
+﻿using UnityEngine;
+
+namespace Wargon.Ecsape {
     using System;
-    using System.Threading;
     using System.Runtime.CompilerServices;
     using System.Collections.Generic;
     using System.Runtime.InteropServices;
@@ -8,6 +9,14 @@
     using Unity.Collections.LowLevel.Unsafe;
     public static class Extensions {
 
+        public static UnityEngine.Vector3 Random(float min, float max) {
+            var n = UnityEngine.Random.Range(min, max);
+            return new Vector3(n, n, n);
+        }
+        public static UnityEngine.Quaternion RandomZ(float min, float max) {
+            var n = UnityEngine.Random.Range(min, max);
+            return Quaternion.Euler(new Vector3(0,0,n));
+        }
         public static T Last<T>(this System.Collections.Generic.List<T> list) {
             return list[^1];
         }
@@ -158,7 +167,7 @@
             count = query.count;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int Entity(int index) {
+        public int GetEntity(int index) {
             return entities[index];
         }
         public Enumerator GetEnumerator() {
@@ -184,111 +193,11 @@
         
             public int Current {
                 [MethodImpl(MethodImplOptions.AggressiveInlining)]
-                get => Query.Entity(index);
+                get => Query.GetEntity(index);
             }
         }
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    public unsafe readonly struct CommandBuffer {
-        private enum CommandType : byte {
-            Add,
-            AddWithoutComponent,
-            Remove,
-            Create,
-            Destroy
-        }
-        [StructLayout(LayoutKind.Sequential)]
-        private struct Command {
-            public CommandType type;
-            public int componentIndex;
-            public void* component;
-            public int entity;
-        }
-
-        private struct Internal {
-            public int count;
-            public int len;
-            [NativeDisableUnsafePtrRestriction]
-            public Command* Commands;
-            public Allocator Allocator;
-        }
-        [NativeDisableUnsafePtrRestriction]
-        private readonly Internal* _internal;
-        public CommandBuffer(int size) {
-            _internal = (Internal*)UnsafeUtility.Malloc(sizeof(Internal), UnsafeUtility.AlignOf<Command>(), Allocator.Persistent);
-            _internal->count = 0;
-            _internal->len = size;
-            _internal->Allocator = Allocator.Persistent;
-            _internal->Commands = (Command*)UnsafeUtility.Malloc(sizeof(Command) * size, UnsafeUtility.AlignOf<Command>(), Allocator.Persistent);
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Add<T>(int entity, T component) where T : unmanaged, IComponent {
-            var cmd = new Command {
-                type = CommandType.Add,
-                entity = entity,
-                componentIndex = Component<T>.Index,
-                component = UnsafeUtility.Malloc(sizeof(T), UnsafeUtility.AlignOf<T>(), Allocator.TempJob)
-            };
-            UnsafeUtility.CopyStructureToPtr(ref component, cmd.component);
-            //Marshal.StructureToPtr(component,(IntPtr)cmd.component, false);
-            _internal->Commands[_internal->count] = cmd;
-            
-            Interlocked.Increment(ref _internal->count);
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Add<T>(int entity) where T : unmanaged, IComponent {
-            var cmd = new Command {
-                type = CommandType.AddWithoutComponent,
-                entity = entity,
-                componentIndex = Component<T>.Index,
-            };
-            _internal->Commands[_internal->count] = cmd;
-            
-            Interlocked.Increment(ref _internal->count);
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Remove<T>(int entity) where T : unmanaged, IComponent {
-            _internal->Commands[_internal->count] = new Command {
-                type = CommandType.Remove,
-                entity = entity,
-                componentIndex = Component<T>.Index
-            };
-            Interlocked.Increment(ref _internal->count);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Execute(World world) {
-            
-            if(_internal->count == 0) return;
-
-            for (int i = 0; i < _internal->count; i++) {
-                var command = _internal->Commands[i];
-                switch (command.type) {
-                    case CommandType.Add:
-                        ref var eAdd = ref world.GetEntity(command.entity);
-                        eAdd.AddPtr(command.component, command.componentIndex);
-                        UnsafeUtility.Free(command.component, Allocator.TempJob);
-                        break;
-                    case CommandType.AddWithoutComponent:
-                        ref var eAddw = ref world.GetEntity(command.entity);
-                        eAddw.AddPtr(command.componentIndex);
-                        break;
-                    case CommandType.Remove:
-                        ref var eRemove = ref world.GetEntity(command.entity);
-                        eRemove.Remove(command.componentIndex);
-                        break;
-                    case CommandType.Create:
-                        break;
-                    case CommandType.Destroy:
-                        world.GetEntity(command.entity).Destroy();
-                        break;
-                }
-            }
-            _internal->count = 0;
-        }
-    }
-    
     internal struct NativeMask {
         private readonly NativeArray<int>.ReadOnly items;
         private int Count;
@@ -325,6 +234,28 @@
                 return ptr;
             }
         }
+
+        public static unsafe T* Resize<T>(T* ptr, int newSize, int oldSize, Allocator allocator) where T : unmanaged {
+            T* newPointer = null;
+            var alignOf = UnsafeUtility.AlignOf<T>();
+            var sizeOf = sizeof(T);
+
+            if (newSize > 0)
+            {
+                newPointer = (T*)UnsafeUtility.Malloc(sizeOf*newSize, alignOf, allocator);
+
+                if (oldSize > 0)
+                {
+                    var itemsToCopy = Math.Min(newSize, oldSize);
+                    var bytesToCopy = itemsToCopy * sizeOf;
+                    UnsafeUtility.MemCpy(newPointer, ptr, bytesToCopy);
+                }
+            }
+            UnsafeUtility.Free(ptr, allocator);
+            ptr = newPointer;
+            return ptr;
+        }
+        
         // public static unsafe NativeArray<T> WrapToNative<T>(ref T[] managedData) where T : unmanaged {
         //     fixed (void* ptr = managedData) {
         //         return NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<T>(ptr, managedData.Length, Allocator.TempJob);

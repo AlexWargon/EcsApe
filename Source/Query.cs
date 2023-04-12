@@ -9,12 +9,13 @@
         private T[] buffer;
         public int capacity;
         public int Count;
-
+        private readonly int ResizeStep;
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal ArrayList(int size) {
+        internal ArrayList(int size, int resizeStep = 16) {
             Count = 0;
             capacity = size;
             buffer = new T[capacity];
+            this.ResizeStep = resizeStep;
         }
 
         public ref T this[int index] {
@@ -25,7 +26,7 @@
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(T item) {
             if (capacity <= Count) {
-                capacity *= 2;
+                capacity += ResizeStep;
                 Array.Resize(ref buffer, capacity);
             }
 
@@ -40,6 +41,11 @@
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void RemoveLast() {
             Count--;
+        }
+
+        public Span<T> AsSpan() {
+            Span<T> span = buffer;
+            return span;
         }
     }
 
@@ -69,7 +75,7 @@
             _worldIndex = world.Index;
             var worldQueries = world.GetQueries();
             var count = world.QueriesCount;
-            for (var i = 0; i < count; i++) AddQuery(worldQueries[i]);
+            for (var i = 0; i < count; i++) FilterQuery(worldQueries[i]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -86,7 +92,7 @@
             _worldIndex = world.Index;
             var worldQueries = world.GetQueries();
             var count = world.QueriesCount;
-            for (var i = 0; i < count; i++) AddQuery(worldQueries[i]);
+            for (var i = 0; i < count; i++) FilterQuery(worldQueries[i]);
         }
 
         public static Archetype Empty => new();
@@ -111,7 +117,7 @@
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void AddQuery(Query query) {
+        private void FilterQuery(Query query) {
             for (var q = 0; q < query.without.Count; q++) {
                 var type = query.without.Types[q];
                 if (hashMask.Contains(type)) return;
@@ -263,7 +269,7 @@
             return archetypes[id];
         }
 
-        public List<Archetype> Archetypes { get; }
+        public List<Archetype> Archetypes;
         public List<Migration> GetMigrations() => cachedMigrations.Values.ToList();
         internal int ArchetypesCount { get; private set; }
 
@@ -359,16 +365,16 @@
                 var query = archetypeFrom.queries[i];
                 if (add) {
                     if (query.without.Contains(componentType)) {
-                        if (!toMigrate.HasToRemove(query)) {
-                            toMigrate.ToRemove.Add(query);
+                        if (!toMigrate.HasQueryToRemoveEntity(query)) {
+                            toMigrate.QueriesToRemoveEntity.Add(query);
                             toMigrate.IsEmpty = false;
                         }
                     }
                 }
                 else {
                     if (query.with.Contains(componentType)) {
-                        if (!toMigrate.HasToRemove(query)) {
-                            toMigrate.ToRemove.Add(query);
+                        if (!toMigrate.HasQueryToRemoveEntity(query)) {
+                            toMigrate.QueriesToRemoveEntity.Add(query);
                             toMigrate.IsEmpty = false;
                         }
                     }
@@ -380,8 +386,8 @@
                 if (add) {
                     if (query.with.Contains(componentType) && !archetypeFrom.hashMask.Contains(componentType) &&
                         archetypeTo.hashMask.Contains(componentType)) {
-                        if (!toMigrate.HasToAdd(query)) {
-                            toMigrate.ToAdd.Add(query);
+                        if (!toMigrate.HasQueryToAddEntity(query)) {
+                            toMigrate.QueriesToAddEntity.Add(query);
                             toMigrate.IsEmpty = false;
                         }
                     }
@@ -389,8 +395,8 @@
                 else {
                     if (query.without.Contains(componentType) && archetypeFrom.hashMask.Contains(componentType) &&
                         !archetypeTo.hashMask.Contains(componentType)) {
-                        if (!toMigrate.HasToAdd(query)) {
-                            toMigrate.ToAdd.Add(query);
+                        if (!toMigrate.HasQueryToAddEntity(query)) {
+                            toMigrate.QueriesToAddEntity.Add(query);
                             toMigrate.IsEmpty = false;
                         }
                     }
@@ -441,8 +447,8 @@
             internal readonly int Archetype;
             internal readonly int ComponentType;
             internal readonly int Key;
-            internal readonly ArrayList<Query> ToAdd;
-            internal readonly ArrayList<Query> ToRemove;
+            internal readonly ArrayList<Query> QueriesToAddEntity;
+            internal readonly ArrayList<Query> QueriesToRemoveEntity;
             internal bool IsEmpty;
 
             public (int, Type, int, bool) GetData() {
@@ -454,23 +460,31 @@
                 Archetype = archetype;
                 ComponentType = componentType;
                 Key = key;
-                ToAdd = new ArrayList<Query>(1);
-                ToRemove = new ArrayList<Query>(1);
+                QueriesToAddEntity = new ArrayList<Query>(1);
+                QueriesToRemoveEntity = new ArrayList<Query>(1);
                 IsEmpty = true;
             }
 
-            public bool HasToAdd(Query query) {
-                for (int i = 0; i < ToAdd.Count; i++) {
-                    if (ToAdd[i].Index == query.Index)
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public void Execute(int entity) {
+                if (IsEmpty) return;
+                for (var i = 0; i < QueriesToAddEntity.Count; i++) QueriesToAddEntity[i].OnAddWith(entity);
+
+                for (var i = 0; i < QueriesToRemoveEntity.Count; i++) QueriesToRemoveEntity[i].OnRemoveWith(entity);
+            }
+            
+            public bool HasQueryToAddEntity(Query query) {
+                for (int i = 0; i < QueriesToAddEntity.Count; i++) {
+                    if (QueriesToAddEntity[i].Index == query.Index)
                         return true;
                 }
 
                 return false;
             }
 
-            public bool HasToRemove(Query query) {
-                for (int i = 0; i < ToRemove.Count; i++) {
-                    if (ToRemove[i].Index == query.Index)
+            public bool HasQueryToRemoveEntity(Query query) {
+                for (int i = 0; i < QueriesToRemoveEntity.Count; i++) {
+                    if (QueriesToRemoveEntity[i].Index == query.Index)
                         return true;
                 }
 
@@ -479,16 +493,9 @@
 
             public override string ToString() {
                 return $"{Key} Migration with component:({Component.GetTypeOfComponent(ComponentType).Name})" +
-                       $"IsEmpty:({IsEmpty}) ToAdd:({ToAdd.Count}), ToRemove:({ToRemove.Count});";
+                       $"IsEmpty:({IsEmpty}) ToAdd:({QueriesToAddEntity.Count}), ToRemove:({QueriesToRemoveEntity.Count});";
             }
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public void Execute(int entity) {
-                if (IsEmpty) return;
-                for (var i = 0; i < ToAdd.Count; i++) ToAdd[i].OnAddWith(entity);
-
-                for (var i = 0; i < ToRemove.Count; i++) ToRemove[i].OnRemoveWith(entity);
-            }
         }
 
 
@@ -521,7 +528,70 @@
             query.with.Add(Component<T>.Index);
             return query;
         }
-
+        public static Query WithAll<T1,T2>(this Query query) 
+            where T1 : struct, IComponent
+            where T2 : struct, IComponent
+        {
+            query.with.Add(Component<T1>.Index);
+            query.with.Add(Component<T2>.Index);
+            return query;
+        }
+        
+        public static Query WithAll<T1,T2,T3>(this Query query) 
+            where T1 : struct, IComponent
+            where T2 : struct, IComponent
+            where T3 : struct, IComponent
+        {
+            query.with.Add(Component<T1>.Index);
+            query.with.Add(Component<T2>.Index);
+            query.with.Add(Component<T3>.Index);
+            return query;
+        }
+        
+        public static Query WithAll<T1,T2,T3,T4>(this Query query) 
+            where T1 : struct, IComponent
+            where T2 : struct, IComponent
+            where T3 : struct, IComponent
+            where T4 : struct, IComponent
+        {
+            query.with.Add(Component<T1>.Index);
+            query.with.Add(Component<T2>.Index);
+            query.with.Add(Component<T3>.Index);
+            query.with.Add(Component<T4>.Index);
+            return query;
+        }
+        
+        public static Query WithAll<T1,T2,T3,T4,T5>(this Query query) 
+            where T1 : struct, IComponent
+            where T2 : struct, IComponent
+            where T3 : struct, IComponent
+            where T4 : struct, IComponent
+            where T5 : struct, IComponent
+        {
+            query.with.Add(Component<T1>.Index);
+            query.with.Add(Component<T2>.Index);
+            query.with.Add(Component<T3>.Index);
+            query.with.Add(Component<T4>.Index);
+            query.with.Add(Component<T5>.Index);
+            return query;
+        }
+        
+        public static Query WithAll<T1,T2,T3,T4,T5,T6>(this Query query) 
+            where T1 : struct, IComponent
+            where T2 : struct, IComponent
+            where T3 : struct, IComponent
+            where T4 : struct, IComponent
+            where T5 : struct, IComponent
+            where T6 : struct, IComponent
+        {
+            query.with.Add(Component<T1>.Index);
+            query.with.Add(Component<T2>.Index);
+            query.with.Add(Component<T3>.Index);
+            query.with.Add(Component<T4>.Index);
+            query.with.Add(Component<T5>.Index);
+            query.with.Add(Component<T6>.Index);
+            return query;
+        }
         public static Query With(this Query query, Type type) {
             query.with.Add(Component.GetIndex(type));
             return query;
@@ -568,7 +638,7 @@
             }
         }
     }
-    public sealed class Query {
+    public class Query {
         internal int count;
         internal int[] entities;
         internal int[] entityMap;
@@ -583,7 +653,7 @@
         
         internal Mask with;
         internal Mask without;
-        
+        internal Mask any;
         internal bool IsDirty;
         public Query(World world) {
             WorldInternal = world;
@@ -591,6 +661,7 @@
             entityMap = new int[256];
             with = new Mask(10);
             without = new Mask(4);
+            any = new Mask(6);
             entityToUpdates = new EntityToUpdate[256];
             Index = world.QueriesCount;
             count = 0;
@@ -670,7 +741,7 @@
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ref Entity Entity(int index) {
+        public ref Entity GetEntity(int index) {
             return ref WorldInternal.GetEntity(entities[index]);
         }
 
@@ -766,7 +837,7 @@
 
         public ref Entity Current {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => ref query.Entity(index);
+            get => ref query.GetEntity(index);
         }
     }
 

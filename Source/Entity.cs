@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Wargon.Ecsape.Components;
 
 namespace Wargon.Ecsape {
     [StructLayout(LayoutKind.Sequential)]
@@ -165,7 +166,18 @@ namespace Wargon.Ecsape {
         public static Archetype GetArchetype(in this Entity entity) {
             return World.Get(entity.WorldIndex).GetArchetype(in entity);
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void SetOwner(in this Entity entity, Entity owner) {
+            entity.Get<Owner>().Entity = owner;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ref Entity GetOwner(in this Entity entity) {
+            return ref entity.Get<Owner>().Entity;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void AddChild(in this Entity entity, Entity child) {
+            child.Get<Owner>().Entity = entity;
+        }
         public static unsafe void AddNative<T>(in this Entity entity, T component) where T : unmanaged, IComponent {
             //entity.WorldNative->Buffer->Add(entity.Index, component);
         }

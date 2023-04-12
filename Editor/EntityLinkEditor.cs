@@ -8,7 +8,7 @@ namespace Wargon.Ecsape.Editor {
     public abstract class UpdatableEditor : UnityEditor.Editor {
         private DateTime timeFromLastFrame;
         private TimeSpan timeSpan;
-        public const int msLock = 60;
+        public const int msLock = 122;
         public float deltaTime;
         private void OnEnable() {
             EditorApplication.update += Update;
@@ -62,27 +62,9 @@ namespace Wargon.Ecsape.Editor {
             optionField.RegisterValueChangedCallback(x => { entityLink.option = (ConvertOption) x.newValue; });
 
             
-            var foldoutField = new PopupField<string>();
-            foldoutField.choices = ComponentEditor.Names;
-            foldoutField.formatSelectedValueCallback += s1 => {
-                var add = ComponentEditor.Create(s1);
-                var list = entityLink.Components;
-                if (add != null) {
-                    if (entityLink.linked) {
-                        entityLink.Entity.AddBoxed(add);
-                    }
-                    else {
-                        if (!list.ConstainsType(add))
-                            list.Add(add);
-                    }
-                }
-                return s1;
-            };
-            
             var addBtn = entityInspector.Q<Button>("Add");
             addBtn.clickable.clicked += () => {
                 Debug.Log("Add");
-                
                 ComponentsListPopup.ShowExample(addBtn.LocalToWorld(addBtn.layout).center, entityLink);
             };
             rootContainer.Add(entityInspector);

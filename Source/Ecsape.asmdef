@@ -2,7 +2,8 @@
     "name": "Ecsape",
     "rootNamespace": "Wargon.Ecsape",
     "references": [
-        "GUID:2665a8d13d1b3f18800f46e256720795"
+        "GUID:2665a8d13d1b3f18800f46e256720795",
+        "GUID:e0cd26848372d4e5c891c569017e11f1"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

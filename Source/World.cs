@@ -1,7 +1,7 @@
-﻿using Wargon.Ecsape.Pools;
+﻿
 
 namespace Wargon.Ecsape {
-    
+    using Pools;
     using System;
     using System.Collections.Generic;
     using System.Runtime.CompilerServices;
@@ -9,7 +9,6 @@ namespace Wargon.Ecsape {
     public partial class World {
         private static readonly World[] worlds;
         private static byte lastWorldIndex;
-        
         private readonly DirtyQueries dirtyQueries;
         private readonly ArrayList<int> freeEntities;
         private readonly byte selfIndex;
@@ -32,7 +31,7 @@ namespace Wargon.Ecsape {
             worlds = new World[4];
             lastWorldIndex = 0;
         }
-
+        
         private World(string name) {
             poolSize = ENTITIES_CACHE;
             pools = new IPool[64];
@@ -224,7 +223,7 @@ namespace Wargon.Ecsape {
             return migrations.GetOrCreateArchetype(components);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Archetype GetArchetype(Span<int> span) {
+        public Archetype GetArchetype(ref Span<int> span) {
             return migrations.GetOrCreateArchetype(ref span);
         }
 
@@ -251,7 +250,7 @@ namespace Wargon.Ecsape {
         {
             var e = CreateEntity();
             Span<int> hash = stackalloc int[2] {Component<TC1>.Index, Component<TC2>.Index};
-            var archetype = GetArchetype(hash);
+            var archetype = GetArchetype(ref hash);
             ref var archetypeId = ref GetArchetypeId(e.Index);
             archetypeId = archetype.id;
             GetPool<TC1>().Add(in component1, e.Index);
@@ -268,7 +267,7 @@ namespace Wargon.Ecsape {
             var e = CreateEntity();
             
             Span<int> hash = stackalloc int[3] {Component<TC1>.Index, Component<TC2>.Index, Component<TC3>.Index};
-            var archetype = GetArchetype(hash);
+            var archetype = GetArchetype(ref hash);
             
             ref var archetypeId = ref GetArchetypeId(e.Index);
             archetypeId = archetype.id;
@@ -290,7 +289,7 @@ namespace Wargon.Ecsape {
             var e = CreateEntity();
             
             Span<int> hash = stackalloc int[4] {Component<TC1>.Index, Component<TC2>.Index, Component<TC3>.Index, Component<TC4>.Index};
-            var archetype = GetArchetype(hash);
+            var archetype = GetArchetype(ref hash);
             
             ref var archetypeId = ref GetArchetypeId(e.Index);
             archetypeId = archetype.id;
@@ -315,7 +314,7 @@ namespace Wargon.Ecsape {
             var e = CreateEntity();
             
             Span<int> hash = stackalloc int[5] {Component<TC1>.Index, Component<TC2>.Index, Component<TC3>.Index, Component<TC4>.Index, Component<TC5>.Index};
-            var archetype = GetArchetype(hash);
+            var archetype = GetArchetype(ref hash);
             
             ref var archetypeId = ref GetArchetypeId(e.Index);
             archetypeId = archetype.id;
@@ -329,13 +328,27 @@ namespace Wargon.Ecsape {
             return e;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Entity CreateEntity(ref List<int> hash)
+        internal Entity CreateEntity(ref int[] types)
         {
             var e = CreateEntity();
-            var archetype = GetArchetype(hash.ToArray());
+            Span<int> spanHash = types;
+            var archetype = GetArchetype(ref spanHash);
             ref var archetypeId = ref GetArchetypeId(e.Index);
             archetypeId = archetype.id;
-            foreach (var i in hash) {
+            foreach (var i in types) {
+                GetPoolByIndex(i).Add(e.Index);
+            }
+            archetype.AddEntity(e.Index);
+            return e;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal Entity CreateEntity(Span<int> types)
+        {
+            var e = CreateEntity();
+            var archetype = GetArchetype(ref types);
+            ref var archetypeId = ref GetArchetypeId(e.Index);
+            archetypeId = archetype.id;
+            foreach (var i in types) {
                 GetPoolByIndex(i).Add(e.Index);
             }
             archetype.AddEntity(e.Index);
@@ -404,7 +417,7 @@ namespace Wargon.Ecsape {
         internal bool bufferGetten = false;
         private bool bufferCreated;
         internal CommandBuffer _buffer;
-        public ref CommandBuffer GetBuffer() {
+        public ref CommandBuffer GetCmdBuffer() {
             bufferGetten = true;
             if (!bufferCreated) {
                 _buffer = new CommandBuffer(10000);
@@ -412,7 +425,7 @@ namespace Wargon.Ecsape {
             }
             return ref _buffer;
         }
-        internal ref CommandBuffer GetBufferInternal() {
+        internal ref CommandBuffer GetCmdBufferInternal() {
             if (!bufferCreated) {
                 _buffer = new CommandBuffer(10000);
                 bufferCreated = true;
@@ -421,11 +434,10 @@ namespace Wargon.Ecsape {
         }
 
         internal unsafe WorldNative* native;
-
         internal unsafe WorldNative* Native {
             get {
                 if (native == null) {
-                    var bfr = GetBufferInternal();
+                    var bfr = GetCmdBufferInternal();
                     fixed (Entity* ent = entities) {
                         var worldNative = new WorldNative{
                             Buffer = &bfr,

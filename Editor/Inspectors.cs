@@ -160,7 +160,7 @@ namespace Wargon.Ecsape {
         static async ValueTask SetDirtyAsync(Object obj) {
             await Task.Delay(200);
             EditorUtility.SetDirty(obj);
-            Debug.Log(200);
+            //Debug.Log(200);
         }
         protected abstract void OnDraw(object value, bool runTime, Type targetType);
 

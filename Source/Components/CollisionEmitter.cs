@@ -12,7 +12,6 @@ namespace Wargon.Ecsape
                     To = link.Entity
                 });
             }
-            
         }
 
         public void Destroy() {

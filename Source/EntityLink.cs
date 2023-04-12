@@ -12,22 +12,18 @@ namespace Wargon.Ecsape
         private Entity entity;
         public ref Entity Entity => ref entity;
         [SerializeReference] public List<object> Components = new();
+        [SerializeField] private ArrayList<int> ComponentTypes = new ArrayList<int>(1, 1);
         private void Start() {
             if(linked) return;
 
             entity = World.Default.CreateEntity();
+            //entity = World.Default.CreateEntity(ComponentTypes.AsSpan());
             entity.Add(new GameObjectSpawnedEvent{Link = this});
         }
 
         public void Link(ref Entity entity) {
             this.entity = entity;
-            // var links = GetComponents<IComponentLink>();
-            //
-            //
-            // foreach (var linkComponent in links) {
-            //     linkComponent.Link(ref entity);
-            // }
-
+            
             foreach (var component in Components) {
                 entity.AddBoxed(component);
             }

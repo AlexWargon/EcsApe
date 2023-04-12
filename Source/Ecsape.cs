@@ -27,7 +27,6 @@ namespace Wargon.Ecsape {
         static Component() {
             Type = typeof(T);
             Index = Component.GetIndex(Type);
-            
             ref var componentType = ref Component.GetComponentType(Index);
             IsSingleTone = componentType.IsSingletone;
             IsTag = componentType.IsTag;
@@ -74,7 +73,7 @@ namespace Wargon.Ecsape {
         public readonly bool IsEvent;
         public readonly bool IsClearOnEnfOfFrame;
         public readonly bool IsDisposable;
-        public readonly string Name;
+        public readonly NativeString Name;
         public ComponentType(int index, bool isSingletone, bool isTag, bool isEvent, bool clearOnEnfOfFrame, bool disposable, string name) {
             Index = index;
             IsSingletone = isSingletone;
@@ -82,7 +81,7 @@ namespace Wargon.Ecsape {
             IsEvent = isEvent;
             IsClearOnEnfOfFrame = clearOnEnfOfFrame;
             IsDisposable = disposable;
-            Name = name;
+            Name = new NativeString(name);
         }
 
         public bool Equals(ComponentType other) {
@@ -614,7 +613,7 @@ namespace Wargon.Ecsape {
         private CommandBuffer cmd;
         private World _world;
         public void OnCreate(World world) {
-            cmd = world.GetBuffer();
+            cmd = world.GetCmdBuffer();
             UnityEngine.Debug.Log("CMD SYSTEM ADDED");
         }
 

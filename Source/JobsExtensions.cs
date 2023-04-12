@@ -8,10 +8,12 @@ using Unity.Jobs;
 namespace Wargon.Ecsape {
     public static class JobsExtensions {
         /// <param name="entitiesSize"> query.Count</param>
-        public static void Complete<TJobParallelFor>(this TJobParallelFor job, int entitiesSize) where TJobParallelFor : struct, IJobParallelFor {
-            job.Schedule(entitiesSize, 64).Complete();
+        public static void ScheduleAndComplete<TJobParallelFor>(this TJobParallelFor job, Query query) where TJobParallelFor : struct, IJobParallelFor {
+            job.Schedule(query.count, 64).Complete();
         }
-        
+        public static void Schedule<TJobParallelFor>(this TJobParallelFor job, Query query) where TJobParallelFor : struct, IJobParallelFor {
+            job.Schedule(query.count, 64);
+        }
         public unsafe static class ForEachJob<TComponent1, TComponent2>
             where TComponent1 : unmanaged, IComponent
             where TComponent2 : unmanaged, IComponent 
@@ -30,7 +32,7 @@ namespace Wargon.Ecsape {
                 public void* Pool2;
                 public NativeQuery Query;
                 public void Execute(int index) {
-                    var e = Query.Entity(index);
+                    var e = Query.GetEntity(index);
                     func.Invoke(fn,Pool1, Pool2, e);
                 }
 
@@ -84,7 +86,7 @@ namespace Wargon.Ecsape {
                 public NativePool<TComponent2> NativePool2;
                 [BurstCompile(CompileSynchronously = true)]
                 public void Execute(int index) {
-                    var e = Query.Entity(index);
+                    var e = Query.GetEntity(index);
                     ref var c1 = ref NativePool1.Get(e);
                     ref var c2 = ref NativePool2.Get(e);
                     //FunctionPointer.Invoke(ref c1,ref c2);
@@ -130,6 +132,20 @@ namespace Wargon.Ecsape {
                 action(ref pool1.Get(ref entity), ref pool2.Get(ref entity));
             }
         }
+
+        public static void RunJob<TComponent1,TComponent2,TJob>(this Query query, TJob job) 
+            where TJob : struct, IEntityJobParallel<TComponent1,TComponent2>
+            where TComponent1 : unmanaged, IComponent
+            where TComponent2 : unmanaged, IComponent
+        {
+            job.RunInternal<TJob>(query, query.WorldInternal);
+        }
+        public static void RunJob<TComponent1,TJob>(this Query query, TJob job) 
+            where TJob : struct, IEntityJobParallel<TComponent1>
+            where TComponent1 : unmanaged, IComponent
+        {
+            job.RunInternal<TJob>(query, query.WorldInternal);
+        }
     }
 
     public interface IEntityJobParallel<TComponent1,TComponent2> 
@@ -137,15 +153,51 @@ namespace Wargon.Ecsape {
         where TComponent2 : unmanaged, IComponent
     {
         void Execute(ref TComponent1 component1, ref TComponent2 component2);
-        //
-        // void RunInternal(Query query, World world) {
-        //     JobRunner jobRunner;
-        //     jobRunner.job = this;
-        //     jobRunner.Query = query.AsNative();
-        //     jobRunner.Pool1 = world.GetPool<TComponent1>().AsNative();
-        //     jobRunner.Pool2 = world.GetPool<TComponent2>().AsNative();
-        //     jobRunner.Schedule(query.count, 64).Complete();
-        // }
+        
+        void RunInternal<TJob>(Query query, World world) where TJob : struct, IEntityJobParallel<TComponent1,TComponent2> {
+            JobRunner<TJob> jobRunner;
+            jobRunner.job = new TJob();
+            jobRunner.Query = query.AsNative();
+            jobRunner.Pool1 = world.GetPool<TComponent1>().AsNative();
+            jobRunner.Pool2 = world.GetPool<TComponent2>().AsNative();
+            jobRunner.Schedule(query.count, 64).Complete();
+        }
+
+        struct JobRunner<TJob> : IJobParallelFor where TJob : struct, IEntityJobParallel<TComponent1,TComponent2>
+        {
+            public NativePool<TComponent1> Pool1;
+            public NativePool<TComponent2> Pool2;
+            public NativeQuery Query;
+            public TJob job;
+            public void Execute(int index) {
+                var e = Query.GetEntity(index);
+                job.Execute(ref Pool1.Get(e), ref Pool2.Get(e));
+            }
+        }
+    }
+    public interface IEntityJobParallel<TComponent1> 
+        where TComponent1 : unmanaged, IComponent
+    {
+        void Execute(int entity, ref TComponent1 component1);
+        
+        void RunInternal<TJob>(Query query, World world) where TJob : struct, IEntityJobParallel<TComponent1> {
+            JobRunner<TJob> jobRunner;
+            jobRunner.job = new TJob();
+            jobRunner.Query = query.AsNative();
+            jobRunner.Pool1 = world.GetPool<TComponent1>().AsNative();
+            jobRunner.Schedule(query.count, 64).Complete();
+        }
+
+        struct JobRunner<TJob> : IJobParallelFor where TJob : struct, IEntityJobParallel<TComponent1>
+        {
+            public NativePool<TComponent1> Pool1;
+            public NativeQuery Query;
+            public TJob job;
+            public void Execute(int index) {
+                var e = Query.GetEntity(index);
+                job.Execute(e,ref Pool1.Get(e));
+            }
+        }
     }
     public interface IEntityJobParallel<TComponent1,TComponent2,TComponent3> 
         where TComponent1 : unmanaged, IComponent 
@@ -162,8 +214,6 @@ namespace Wargon.Ecsape {
     {
         void Execute(ref TComponent1 component1,ref TComponent2 component2,ref TComponent3 component3, ref TComponent4 component4);
     }
-
-
 
     public ref struct Entities {
         internal World world;
@@ -188,7 +238,7 @@ namespace Wargon.Ecsape {
                 public void* Pool2;
                 public NativeQuery Query;
                 public void Execute(int index) {
-                    var e = Query.Entity(index);
+                    var e = Query.GetEntity(index);
                     func.Invoke(fn,Pool1, Pool2, e);
                 }
 
