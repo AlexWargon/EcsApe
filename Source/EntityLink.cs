@@ -7,6 +7,7 @@ using Object = UnityEngine.Object;
 namespace Wargon.Ecsape
 {
     public class EntityLink : MonoBehaviour, IEntityLink {
+        public string WorldName = "Default";
         public bool linked;
         public ConvertOption option;
         private Entity entity;
@@ -15,8 +16,8 @@ namespace Wargon.Ecsape
         [SerializeField] private ArrayList<int> ComponentTypes = new ArrayList<int>(1, 1);
         private void Start() {
             if(linked) return;
-
-            entity = World.Default.CreateEntity();
+            
+            entity = World.GetOrCreate(WorldName).CreateEntity();
             //entity = World.Default.CreateEntity(ComponentTypes.AsSpan());
             entity.Add(new GameObjectSpawnedEvent{Link = this});
         }

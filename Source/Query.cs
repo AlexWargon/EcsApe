@@ -1,10 +1,12 @@
-﻿namespace Wargon.Ecsape {
+﻿using Unity.Collections.LowLevel.Unsafe;
+
+namespace Wargon.Ecsape {
     using System;
     using System.Collections.Generic;
     using System.Linq;
     using System.Runtime.CompilerServices;
     using System.Runtime.InteropServices;
-    
+
     internal class ArrayList<T> {
         private T[] buffer;
         public int capacity;
@@ -44,8 +46,7 @@
         }
 
         public Span<T> AsSpan() {
-            Span<T> span = buffer;
-            return span;
+            return buffer;
         }
     }
 
@@ -139,11 +140,14 @@
         internal void RemoveEntityFromPools(World world, int entity) {
             for (var i = 0; i < maskArray.Count; i++) {
                 var pool = world.GetPoolByIndex(maskArray.Types[i]);
-                if (pool.Has(entity))
+                //if (pool.Has(entity))
                     pool.Remove(entity);
             }
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal bool HasComponent(int type) {
+            return hashMask.Contains(type);
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Entity CreateEntity() {
             var world = World.Get(_worldIndex);
@@ -468,9 +472,8 @@
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void Execute(int entity) {
                 if (IsEmpty) return;
-                for (var i = 0; i < QueriesToAddEntity.Count; i++) QueriesToAddEntity[i].OnAddWith(entity);
-
                 for (var i = 0; i < QueriesToRemoveEntity.Count; i++) QueriesToRemoveEntity[i].OnRemoveWith(entity);
+                for (var i = 0; i < QueriesToAddEntity.Count; i++) QueriesToAddEntity[i].OnAddWith(entity);
             }
             
             public bool HasQueryToAddEntity(Query query) {
@@ -878,6 +881,21 @@
                     return true;
 
             return false;
+        }
+    }
+
+    internal unsafe class ArchetypeProto {
+    
+        struct Column {
+            public void *elements;      // buffer with component data
+            public int element_size; // size of a single element
+            public int count;        // number of elements
+        }
+        private void* buffer;
+        private int fullSize;
+        private Column* components;
+        public ref T Get<T>(int index) where T: unmanaged, IComponent {
+            return ref ((T*)components[Component<T>.Index].elements)[index];
         }
     }
 }

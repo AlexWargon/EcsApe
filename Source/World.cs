@@ -374,7 +374,8 @@ namespace Wargon.Ecsape {
         }
         
         public static World GetOrCreate(string name) {
-            name ??= DEFAULT;
+            if (string.IsNullOrEmpty(name))
+                name = DEFAULT;
             if (ids.TryGetValue(name, out var index))
                 return Get(index);
             

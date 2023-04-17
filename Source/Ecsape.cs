@@ -1,5 +1,7 @@
 using System;
+using System.CodeDom.Compiler;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -23,7 +25,7 @@ namespace Wargon.Ecsape {
         public static readonly bool IsEvent;
         public static readonly bool IsClearOnEnfOfFrame;
         public static readonly bool IsDisposable;
-        
+        public static readonly int SizeInBytes;
         static Component() {
             Type = typeof(T);
             Index = Component.GetIndex(Type);
@@ -33,7 +35,7 @@ namespace Wargon.Ecsape {
             IsEvent = componentType.IsEvent;
             IsClearOnEnfOfFrame = componentType.IsClearOnEnfOfFrame;
             IsDisposable = componentType.IsDisposable;
-            
+            SizeInBytes = componentType.SizeInBytes;
             if (IsClearOnEnfOfFrame) {
                 DefaultClearSystems.Add<ClearEventsSystem<T>>();
             }
@@ -55,13 +57,12 @@ namespace Wargon.Ecsape {
         public readonly bool isEvent;
         public readonly bool isClearOnEnfOfFrame;
         public readonly bool isDisposable;
-
         public static Component<T> AsRef() {
             return new Component<T>(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsDisposable);
         }
 
         public static ComponentType AsComponentType() {
-            return new ComponentType(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsDisposable, Type.Name);
+            return new ComponentType(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsDisposable, Type.Name, SizeInBytes);
         }
     }
 
@@ -74,7 +75,8 @@ namespace Wargon.Ecsape {
         public readonly bool IsClearOnEnfOfFrame;
         public readonly bool IsDisposable;
         public readonly NativeString Name;
-        public ComponentType(int index, bool isSingletone, bool isTag, bool isEvent, bool clearOnEnfOfFrame, bool disposable, string name) {
+        public readonly int SizeInBytes;
+        public ComponentType(int index, bool isSingletone, bool isTag, bool isEvent, bool clearOnEnfOfFrame, bool disposable, string name, int size) {
             Index = index;
             IsSingletone = isSingletone;
             IsTag = isTag;
@@ -82,6 +84,7 @@ namespace Wargon.Ecsape {
             IsClearOnEnfOfFrame = clearOnEnfOfFrame;
             IsDisposable = disposable;
             Name = new NativeString(name);
+            SizeInBytes = size;
         }
 
         public bool Equals(ComponentType other) {
@@ -116,7 +119,8 @@ namespace Wargon.Ecsape {
                 typeof(IEventComponent).IsAssignableFrom(type),
                 typeof(IClearOnEndOfFrame).IsAssignableFrom(type),
                 typeof(IDisposable).IsAssignableFrom(type), 
-                type.Name);
+                type.Name,
+                Marshal.SizeOf(type));
             AddInfo(ref componentType, index);
             count++;
             return index;
@@ -191,7 +195,7 @@ namespace Wargon.Ecsape {
         public int Count => count - 1;
         public TagPool(int size) {
             data = new T[1];
-            entities = new int[size];
+            entities = new int[1];
             Info = Component<T>.AsComponentType();
             count = 1;
             self = this;
@@ -212,18 +216,15 @@ namespace Wargon.Ecsape {
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(int entity) {
-            entities[entity] = count;
             count++;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(in T component, int entity) {
-            entities[entity] = count;
             data[0] = component;
             count++;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public unsafe void AddPtr(void* component, int entity) {
-            entities[entity] = count;
             data[0] = Marshal.PtrToStructure<T>((IntPtr)component);
             count++;
         }
@@ -237,18 +238,16 @@ namespace Wargon.Ecsape {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void AddBoxed(object component, int entity) {
-            entities[entity] = count;
             data[0] = (T)component;
             count++;
         }
 
         public void Remove(int entity) {
-            entities[entity] = 0;
             count--;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         bool IPool.Has(int entity) {
-            return entities[entity] > 0;
+            return entities[0] > 0;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         void IPool.Resize(int newSize) {
@@ -692,7 +691,7 @@ namespace Wargon.Ecsape {
             }
         }
 
-        public Systems Init() {
+        public void Init() {
             defaultSystems.Init();
             if (defaultSystems.enabled)
                 foreach (var system in defaultSystems.start)
@@ -714,7 +713,7 @@ namespace Wargon.Ecsape {
             }
 
             InitDependencies();
-            return this;
+
         }
 
         public Systems Clear<T>() where T : struct, IComponent {
