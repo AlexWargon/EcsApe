@@ -15,6 +15,8 @@ namespace Wargon.Ecsape.Editor {
     }
     public class ComponentsListPopup : EditorWindow
     {
+        private EntityLink target;
+        
         [MenuItem("Window/UI Toolkit/ComponentsListPopup")]
         public static void ShowExample(Vector2 pos, EntityLink target)
         {
@@ -24,7 +26,6 @@ namespace Wargon.Ecsape.Editor {
             wnd.position = new Rect(pos + new Vector2(500,0), new Vector2(300, 500));
         }
 
-        private EntityLink target;
         public void SetTarget(EntityLink link) => target = link;
         public void CreateGUI()
         {
@@ -36,12 +37,11 @@ namespace Wargon.Ecsape.Editor {
             var labelFromUxml = visualTree.Instantiate();
             root.Add(labelFromUxml);
             var listView = new ListView();
-            var items = ComponentEditor.Names;
             VisualElement MakeItem() => new Label();
-            void BindItem(VisualElement e, int i) => ((Label) e).text = items[i];
+            void BindItem(VisualElement e, int i) => ((Label) e).text = ComponentEditor.Names[i];
             listView.makeItem = MakeItem;
             listView.bindItem = BindItem;
-            listView.itemsSource = items;
+            listView.itemsSource = ComponentEditor.Names;
             listView.fixedItemHeight = 20;
             listView.selectionType = SelectionType.Multiple;
 

@@ -1,7 +1,5 @@
 using System;
-using System.CodeDom.Compiler;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -17,6 +15,10 @@ namespace Wargon.Ecsape {
 
     public interface IClearOnEndOfFrame { }
 
+    public interface IOnCreate {
+        void OnCreate();
+    }
+
     public readonly struct Component<T> where T : struct, IComponent {
         public static readonly int Index;
         public static readonly Type Type;
@@ -26,6 +28,7 @@ namespace Wargon.Ecsape {
         public static readonly bool IsClearOnEnfOfFrame;
         public static readonly bool IsDisposable;
         public static readonly int SizeInBytes;
+        public static readonly bool IsOnCreate;
         static Component() {
             Type = typeof(T);
             Index = Component.GetIndex(Type);
@@ -36,6 +39,7 @@ namespace Wargon.Ecsape {
             IsClearOnEnfOfFrame = componentType.IsClearOnEnfOfFrame;
             IsDisposable = componentType.IsDisposable;
             SizeInBytes = componentType.SizeInBytes;
+            IsOnCreate = componentType.IsOnCreate;
             if (IsClearOnEnfOfFrame) {
                 DefaultClearSystems.Add<ClearEventsSystem<T>>();
             }
@@ -62,7 +66,7 @@ namespace Wargon.Ecsape {
         }
 
         public static ComponentType AsComponentType() {
-            return new ComponentType(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsDisposable, Type.Name, SizeInBytes);
+            return new ComponentType(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsDisposable, Type.Name, SizeInBytes, IsOnCreate);
         }
     }
 
@@ -76,7 +80,8 @@ namespace Wargon.Ecsape {
         public readonly bool IsDisposable;
         public readonly NativeString Name;
         public readonly int SizeInBytes;
-        public ComponentType(int index, bool isSingletone, bool isTag, bool isEvent, bool clearOnEnfOfFrame, bool disposable, string name, int size) {
+        public readonly bool IsOnCreate;
+        public ComponentType(int index, bool isSingletone, bool isTag, bool isEvent, bool clearOnEnfOfFrame, bool disposable, string name, int size, bool isOnCreate) {
             Index = index;
             IsSingletone = isSingletone;
             IsTag = isTag;
@@ -85,6 +90,7 @@ namespace Wargon.Ecsape {
             IsDisposable = disposable;
             Name = new NativeString(name);
             SizeInBytes = size;
+            IsOnCreate = isOnCreate;
         }
 
         public bool Equals(ComponentType other) {
@@ -120,7 +126,9 @@ namespace Wargon.Ecsape {
                 typeof(IClearOnEndOfFrame).IsAssignableFrom(type),
                 typeof(IDisposable).IsAssignableFrom(type), 
                 type.Name,
-                Marshal.SizeOf(type));
+                Marshal.SizeOf(type),
+                typeof(IOnCreate).IsAssignableFrom(type)
+                );
             AddInfo(ref componentType, index);
             count++;
             return index;
@@ -166,7 +174,7 @@ namespace Wargon.Ecsape {
                 var info = Component.GetComponentType(typeIndex);
                 var componentType = Component.GetTypeOfComponent(typeIndex);
                 var poolType = info.IsTag || info.IsSingletone || info.IsEvent ? typeof(TagPool<>)
-                    : info.IsDisposable ? typeof(DisposablePool<>) : typeof(Pool<>);
+                    : info.IsDisposable ? typeof(DisposablePool<>) : info.IsOnCreate ? typeof(OnCreatePool<>) : typeof(Pool<>);
                 var pool = (IPool) Generic.New(poolType, componentType, size);
                 return pool;
             }
@@ -265,6 +273,103 @@ namespace Wargon.Ecsape {
         }
     }
 
+    internal class OnCreatePool<T> : IPool<T> where T : struct, IComponent, IOnCreate {
+        private readonly IPool self;
+        private int count;
+        private T[] data;
+        private int[] entities;
+        public int Capacity => data.Length;
+
+        public int Count => count - 1;
+        public OnCreatePool(int size) {
+            data = new T[size];
+            entities = new int[size];
+            Info = Component<T>.AsComponentType();
+            count = 1;
+            self = this;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ref T Get(int entity) {
+            return ref data[entities[entity]];
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ref T Get(ref Entity entity) {
+            return ref data[entities[entity.Index]];
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Set(in T component, int entity) {
+            data[entities[entity]] = component;
+        }
+        public void SetBoxed(object component, int entity) {
+            data[entities[entity]] = (T)component;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Add(int entity) {
+            if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
+            entities[entity] = count;
+            var c = default(T);
+            c.OnCreate();
+            data[count] = c;
+            count++;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Add(in T component, int entity) {
+            if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
+            entities[entity] = count;
+            data[count] = component;
+            data[count].OnCreate();
+            count++;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AddBoxed(object component, int entity) {
+            if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
+            entities[entity] = count;
+            data[count] = (T)component;
+            data[count].OnCreate();
+            count++;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public unsafe void AddPtr(void* component, int entity) {
+            if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
+            entities[entity] = count;
+            data[count] = Marshal.PtrToStructure<T>((IntPtr)component);
+            data[count].OnCreate();
+            count++;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Remove(int entity) {
+            entities[entity] = 0;
+            count--;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        bool IPool.Has(int entity) {
+            return entities[entity] > 0;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        void IPool.Resize(int newSize) {
+            Array.Resize(ref entities, newSize);
+        }
+
+        public ComponentType Info { get; }
+
+        object IPool.GetRaw(int index) {
+            return Get(index);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ref T[] GetRawData() {
+            return ref data;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ref int[] GetRawEntities() {
+            return ref entities;
+        }
+
+        public IPool AsIPool() {
+            return self;
+        }
+    }
     internal class Pool<T> : IPool<T> where T : struct, IComponent {
         private readonly IPool self;
         private int count;
@@ -524,6 +629,15 @@ namespace Wargon.Ecsape {
         void OnUpdate(float deltaTime); // ReSharper disable Unity.PerformanceAnalysis
     }
 
+    public abstract class SystemBase : ISystem {
+        protected Entities Entities;
+        protected World World;
+        public void OnCreate(World w) {
+            World = w;
+            Entities.world = w;
+        }
+        public abstract void OnUpdate(float delatTime);
+    }
     internal sealed class ClearEventsSystem<T> : ISystem where T : struct, IComponent {
         private IPool<T> pool;
         private Query query;
@@ -691,7 +805,7 @@ namespace Wargon.Ecsape {
             }
         }
 
-        public void Init() {
+        public Systems Init() {
             defaultSystems.Init();
             if (defaultSystems.enabled)
                 foreach (var system in defaultSystems.start)
@@ -713,7 +827,7 @@ namespace Wargon.Ecsape {
             }
 
             InitDependencies();
-
+            return this;
         }
 
         public Systems Clear<T>() where T : struct, IComponent {
@@ -729,7 +843,6 @@ namespace Wargon.Ecsape {
         public Systems Add<T>() where T : class, ISystem, new() {
             var system = new T();
             IfIsEventSystemAddClearSystem(system);
-            
             AddSystem(system);
             return this;
         }
@@ -765,7 +878,7 @@ namespace Wargon.Ecsape {
             return this;
         }
 
-        public Systems Add(Group group) {
+        public Systems AddGroup(Group group) {
             groups.Add(group);
             //Debug.Log($"group {group.Name} Added");
             return this;

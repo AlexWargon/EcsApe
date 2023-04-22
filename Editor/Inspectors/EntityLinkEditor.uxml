@@ -2,6 +2,7 @@
     <ui:VisualElement name="EntityInpector">
         <ui:Label text="ENTITY:01" display-tooltip-when-elided="true" name="EntityIndex" />
         <uie:EnumField label="Option" value="Stay" name="Option" />
+        <ui:TextField picking-mode="Ignore" label="World" value="Default" text="Default" name="World" />
         <ui:Label text="Components" display-tooltip-when-elided="true" name="Components" style="font-size: 14px; -unity-font-style: bold; align-items: flex-end; justify-content: space-around;">
             <ui:Button display-tooltip-when-elided="true" name="Add" style="background-image: url(&apos;project://database/Assets/EcsApe/Editor/Icons/icons8-plus-52%20(1).png?fileID=2800000&amp;guid=971e1570af8a1a04fa754f0752184fd9&amp;type=3#icons8-plus-52 (1)&apos;); margin-left: 3px; margin-right: 3px; margin-top: 3px; margin-bottom: 3px; border-left-width: 0; border-right-width: 0; border-top-width: 0; border-bottom-width: 0; background-color: rgba(88, 88, 88, 0); min-width: 20px; min-height: 20px; max-width: 20px;" />
         </ui:Label>

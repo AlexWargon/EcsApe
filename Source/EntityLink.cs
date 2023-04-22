@@ -16,12 +16,24 @@ namespace Wargon.Ecsape
         [SerializeField] private ArrayList<int> ComponentTypes = new ArrayList<int>(1, 1);
         private void Start() {
             if(linked) return;
-            
             entity = World.GetOrCreate(WorldName).CreateEntity();
             //entity = World.Default.CreateEntity(ComponentTypes.AsSpan());
             entity.Add(new GameObjectSpawnedEvent{Link = this});
         }
 
+        public void LinkFast(in Entity entity) {
+            foreach (var component in Components) {
+                entity.AddBoxed(component);
+            }
+            switch (option) {
+                case ConvertOption.Destroy:
+                    break;
+                case ConvertOption.DestroyComponents:
+                    break;
+                case ConvertOption.Stay:
+                    break;
+            }
+        }
         public void Link(ref Entity entity) {
             this.entity = entity;
             
@@ -37,15 +49,9 @@ namespace Wargon.Ecsape
             }
             switch (option) {
                 case ConvertOption.Destroy:
-                    // foreach (var linkComponent in links) {
-                    //     linkComponent.Destroy();
-                    // }
                     Destroy(this);
                     break;
                 case ConvertOption.DestroyComponents:
-                    // foreach (var linkComponent in links) {
-                    //     linkComponent.Destroy();
-                    // }
                     break;
                 case ConvertOption.Stay:
                     break;

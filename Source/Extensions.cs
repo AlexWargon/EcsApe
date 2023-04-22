@@ -21,6 +21,10 @@ namespace Wargon.Ecsape {
             return list[^1];
         }
 
+        public static T RandomElement<T>(this System.Collections.Generic.List<T> list) {
+            var random = new Random();
+            return list[random.Next(list.Count)];
+        }
         public static void RemoveLast(this System.Collections.IList list) {
             list.RemoveAt(list.Count - 1);
         }
@@ -304,13 +308,13 @@ namespace Wargon.Ecsape {
 
             Lenght = source.Length;
         }
-
+        
         public override string ToString() {
-            var str = string.Empty;
-            for (int i = 0; i < Lenght; i++) {
-                str += letters[i];
-            }
-            return str;
+            return AsSpan().ToString();
+        }
+
+        public Span<char> AsSpan() {
+            return new Span<char>(letters, Lenght);
         }
     }
 

@@ -1,9 +1,11 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.UIElements;
+using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
@@ -27,6 +29,7 @@ namespace Wargon.Ecsape {
             Add<bool>(new BoolInspector().Create());
             Add<AnimationCurve>(new CurveInspector().Create());
             Add<LayerMask>(new LayerMaskInspector().Create());
+            Add<List<Entity>>(new ListOfEntitiesInpsector().Create());
             inited = true;
         }
 
@@ -95,11 +98,10 @@ namespace Wargon.Ecsape {
         private object data;
         private Entity entity;
         protected string fieldName = "field";
-
+        protected bool runtimeMode;
         private bool initialized;
         protected Func<object, ValueTask<object>> onChange;
         private VisualElement previousRoot;
-        private bool runtimeMode;
         private object target;
         private Object targetLink;
         private const float updateDelay = 0.2f;
@@ -396,6 +398,55 @@ namespace Wargon.Ecsape {
 
             field.value = default;
             field.RegisterValueChangedCallback(x => { onChange?.Invoke(x.newValue); });
+        }
+    }
+    
+    public class ListOfEntitiesInpsector : BaseInspector {
+        private ListView listView;
+        private List<Entity> items;
+        private IMGUIContainer IMGUIContainer;
+        private ReorderableList _reorderableList;
+        private Type listType;
+        protected override VisualElement GetField() {
+            return listView;
+        }
+
+        protected override void OnDraw(object value, bool runTime, Type targetType) {
+            if (value == null) value = new List<Entity>();
+            items = (List<Entity>)value;
+            if(items.Count ==0) items.Add(default(Entity));
+            listView.itemsSource = items;
+        }
+
+        protected override void OnCreate() {
+
+            Func<VisualElement> makeItem = () => new Label();
+            Action<VisualElement, int> bindItem = (e, i) => ((Label)e).text = $"Entity {items[i].GetArchetype().ToString()}";
+            const int itemHeight = 16;
+            // listView = new ListView(items, itemHeight, makeItem, bindItem);
+            //
+            // listView.selectionType = SelectionType.Multiple;
+            // listView.onItemsChosen += objects => Debug.Log(objects);
+            // listView.onSelectionChange += objects => Debug.Log(objects);
+            //
+            // listView.style.flexGrow = 1.0f;
+            // listView.reorderMode = ListViewReorderMode.Animated;
+            // listView.virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight;
+            // listView.showFoldoutHeader = true;
+            // listView.headerTitle = "MyList";
+            // listView.showAddRemoveFooter = true;
+            // listView.reorderMode = ListViewReorderMode.Animated;
+            _reorderableList = new ReorderableList(items, typeof(Entity));
+            //_reorderableList.
+        }
+
+        void DrawItem() {
+            
+        }
+        void BindItem(VisualElement item, int index)
+        {
+            var label = (Label)item;
+            label.text = items[index].Index.ToString();
         }
     }
 }

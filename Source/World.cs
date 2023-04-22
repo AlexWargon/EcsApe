@@ -42,7 +42,7 @@ namespace Wargon.Ecsape {
             dirtyQueries = new DirtyQueries(16);
             entityComponentsAmounts = new sbyte[ENTITIES_CACHE];
             archetypeIDs = new int[ENTITIES_CACHE];
-            migrations = new Migrations(this);
+            _archetypes = new Archetypes(this);
             selfIndex = lastWorldIndex;
             worlds[selfIndex] = this;
             lastWorldIndex++;
@@ -134,9 +134,9 @@ namespace Wargon.Ecsape {
         internal void OnDestroyEntity(in Entity entity) {
             var index = entity.Index;
             ref var archetype = ref GetArchetypeId(index);
-            var archetypeRef = migrations.GetArchetype(archetype);
+            var archetypeRef = _archetypes.GetArchetype(archetype);
             archetypeRef.RemoveEntity(index);
-            archetypeRef.RemoveEntityFromPools(this, index);
+            archetypeRef.RemoveEntityFromPools(index);
             
             archetype = 0;
             freeEntities.Add(index);
@@ -147,7 +147,7 @@ namespace Wargon.Ecsape {
         internal void OnDestroyEntity(in Entity entity, ref sbyte componentsAmount) {
             var index = entity.Index;
             ref var archetype = ref GetArchetypeId(index);
-            var archetypeRef = migrations.GetArchetype(archetype);
+            var archetypeRef = _archetypes.GetArchetype(archetype);
             archetypeRef.RemoveEntity(index);
 
             archetype = 0;
@@ -160,8 +160,7 @@ namespace Wargon.Ecsape {
             if (idx >= poolKeys.Length - 1) Array.Resize(ref poolKeys, idx + 4);
             if (poolsCount >= pools.Length - 1) Array.Resize(ref pools, idx + 4);
             poolKeys[idx] = poolsCount;
-            var pool = IPool.New(ENTITIES_CACHE, idx);
-            pools[poolsCount] = pool;
+            pools[poolsCount] = IPool.New(ENTITIES_CACHE, idx);
             poolsCount++;
         }
         
@@ -200,36 +199,46 @@ namespace Wargon.Ecsape {
             return ref entityComponentsAmounts[entity.Index];
         }
 
-        private readonly Migrations migrations;
+        private readonly Archetypes _archetypes;
 
         internal Archetype GetArchetype(in Entity entity) {
-            return migrations.GetArchetype(archetypeIDs[entity.Index]);
+            return _archetypes.GetArchetype(archetypeIDs[entity.Index]);
         }
+ 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void MigrateEntity(int entity, ref int archetype, int componentType, bool add) {
-            migrations.Migrate(entity, ref archetype, ref componentType, ref add);
+        internal void ChangeEntityArchetype(in int entity, in int componentType, bool add) {
+            if(add)
+                _archetypes.GetArchetype(archetypeIDs[entity]).TransferAdd(in entity, in componentType);
+            else
+                _archetypes.GetArchetype(archetypeIDs[entity]).TransferRemove(in entity, in componentType);
         }
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal ref int GetArchetypeId(int entity) {
             return ref archetypeIDs[entity];
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Archetype GetArchetype(params Type[] components) {
-            return migrations.GetOrCreateArchetype(components);
+            return _archetypes.GetOrCreateArchetype(components);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Archetype GetArchetype(params int[] components) {
-            return migrations.GetOrCreateArchetype(components);
+            return _archetypes.GetOrCreateArchetype(components);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Archetype GetArchetype(ref Span<int> span) {
-            return migrations.GetOrCreateArchetype(ref span);
+            return _archetypes.GetOrCreateArchetype(ref span);
         }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Archetype GetArchetype(HashSet<int> mask) {
+            return _archetypes.GetOrCreateArchetype(mask);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal Archetype GetArchetype(int mask) {
+            return _archetypes.GetArchetype(mask);
+        }
+        public int ArchetypesCountInternal() => _archetypes.ArchetypesCount;
 
-        public int ArchetypesCountInternal() => migrations.ArchetypesCount;
-
-        public List<Archetype> ArchetypesInternal() => migrations.Archetypes;
+        public List<Archetype> ArchetypesInternal() => _archetypes.ArchetypesList;
 
         public IPool[] PoolsInternal() => pools;
 
@@ -240,8 +249,6 @@ namespace Wargon.Ecsape {
         public int ComponentsCountInternal(Entity entity) {
             return entityComponentsAmounts[entity.Index];
         }
-
-        public List<Migrations.Migration> MigrationsInternal() => migrations.GetMigrations();
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Entity CreateEntity<TC1, TC2>(in TC1 component1, in TC2 component2)
@@ -461,9 +468,9 @@ namespace Wargon.Ecsape {
         }
     }
     public static class WorldExtensions {
-        internal static Dictionary<IntKey, Query> Queries = new Dictionary<IntKey, Query>();
+        internal static Dictionary<int, Query> Queries = new Dictionary<int, Query>();
         public static Query GetQuery<T1>(this World world) where T1 : struct, IComponent {
-            var key = new IntKey(Component<T1>.Index);
+            var key = Component<T1>.Index;
             if (!HasKey(key)) {
                 var q = new Query(world).With<T1>();
                 Queries.Add(key, q);
@@ -478,7 +485,7 @@ namespace Wargon.Ecsape {
             where T2 : struct, IComponent 
         {
             Span<int> hash = stackalloc int[2] {Component<T1>.Index, Component<T2>.Index};
-            var key = new IntKey(Migrations.GetCustomHashCode(ref hash));
+            var key = get_hash_code(ref hash);
             if (!HasKey(key)) {
                 var q = new Query(world).With<T1>().With<T2>();
                 Queries.Add(key, q);
@@ -492,7 +499,7 @@ namespace Wargon.Ecsape {
             where T3 : struct, IComponent 
         {
             Span<int> hash = stackalloc int[3] {Component<T1>.Index, Component<T2>.Index, Component<T2>.Index };
-            var key = new IntKey(Migrations.GetCustomHashCode(ref hash));
+            var key = get_hash_code(ref hash);
             if (!HasKey(key)) {
                 var q = new Query(world).With<T1>().With<T2>().With<T3>();
                 Queries.Add(key, q);
@@ -500,9 +507,36 @@ namespace Wargon.Ecsape {
             }
             return Queries[key];
         }
-        
-        private static bool HasKey(in IntKey key) {
+        public static Query GetQuery<T1, T2, T3, T4>(this World world) 
+            where T1 : struct, IComponent 
+            where T2 : struct, IComponent 
+            where T3 : struct, IComponent 
+            where T4 : struct, IComponent 
+        {
+            Span<int> hash = stackalloc int[4] { Component<T1>.Index, Component<T2>.Index, Component<T3>.Index, Component<T4>.Index };
+            var key = get_hash_code(ref hash);
+            if (!HasKey(key)) {
+                var q = new Query(world).With<T1>().With<T2>().With<T3>().With<T4>();
+                Queries.Add(key, q);
+                return q;
+            }
+            return Queries[key];
+        }
+        private static bool HasKey(int key) {
             return Queries.ContainsKey(key);
+        }
+
+        private static int get_hash_code(ref Span<int> array) {
+            int hc = array.Length;
+            for (var index = 0; index < array.Length; index++) {
+                hc = unchecked(hc * 314159 + array[index]);
+            }
+            return hc;
+        }
+
+        private static unsafe T* create_ptr<T>(int size) where T : unmanaged {
+            var s = stackalloc T[size];
+            return s;
         }
     }
 }

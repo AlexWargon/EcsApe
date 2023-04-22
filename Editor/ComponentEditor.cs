@@ -9,19 +9,19 @@ namespace Wargon.Ecsape {
     public static class ComponentEditor {
         private static readonly Dictionary<string, Type> components = new();
         private static readonly Dictionary<string, Color> colors = new(); 
-        public static readonly List<string> Names = new();
+        public static List<string> Names = new();
 
-        private static readonly HashSet<Type> excludes = new HashSet<Type>() {
+        private static readonly HashSet<Type> excludes = new HashSet<Type> {
             typeof(IComponent),
             typeof(TransformReference),
             typeof(Translation),
             typeof(DestroyEntity),
-
+            
         };
         static ComponentEditor() {
 
-            var types = FindAllTypeWithInterface(typeof(IComponent));
-            SortNames(types);
+            var types = FindAllTypeWithInterface(typeof(IComponent), type => !excludes.Contains(type));
+            SortByName(types);
             var count = types.Length;
             for (var index = 0; index < count; index++) {
                 var type1 = types[index];
@@ -46,9 +46,11 @@ namespace Wargon.Ecsape {
                 .SelectMany(s => s.GetTypes())
                 .Where(p => interfaceType.IsAssignableFrom(p) && p != interfaceType).ToArray();
         }
-        private static void SortNames(Type[] list) {
+        
+        private static void SortByName(Type[] list) {
             Array.Sort(list, (x,y) => string.CompareOrdinal(x.Name, y.Name));
         }
+        
         public static bool TryGetColor(string component, out Color color) {
             if (colors.TryGetValue(component, out var color2)) {
                 color = color2;
@@ -57,12 +59,14 @@ namespace Wargon.Ecsape {
             color = Color.grey;
             return false;
         }
+        
         public static object Create(string name) {
             if (name == null) return null;
             if (components.ContainsKey(name))
                 return Create(components[name]);
             return null;
         }
+        
         public static object Create(Type type) {
             
             return Activator.CreateInstance(type);

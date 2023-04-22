@@ -2,7 +2,6 @@
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine.UIElements;
-using Debug = UnityEngine.Debug;
 
 namespace Wargon.Ecsape.Editor {
     public abstract class UpdatableEditor : UnityEditor.Editor {
@@ -37,6 +36,7 @@ namespace Wargon.Ecsape.Editor {
         private EntityLink entityLink;
         private BaseVisualElement rootContainer;
         private Label label;
+        private bool inited;
         public void OnDestroy() {
             Inspectors.Clear();
             ComponentInspectors.Clear();
@@ -56,6 +56,13 @@ namespace Wargon.Ecsape.Editor {
             var entityInspector = rootContainer.Root.Q<VisualElement>("EntityInpector");
             label = entityInspector.Q<Label>("EntityIndex");
             
+            var worldField = entityInspector.Q<TextField>("World");
+
+            if (string.IsNullOrEmpty(entityLink.WorldName))
+                entityLink.WorldName = World.DEFAULT;
+            worldField.SetValueWithoutNotify(entityLink.WorldName);
+            worldField.RegisterValueChangedCallback(x => { entityLink.WorldName = x.newValue; });
+            
             var optionField = entityInspector.Q<EnumField>("Option");
             optionField.Init(ConvertOption.Stay);
             optionField.SetValueWithoutNotify(ConvertOption.Stay);
@@ -64,15 +71,17 @@ namespace Wargon.Ecsape.Editor {
             
             var addBtn = entityInspector.Q<Button>("Add");
             addBtn.clickable.clicked += () => {
-                Debug.Log("Add");
+                //Debug.Log("Add");
                 ComponentsListPopup.ShowExample(addBtn.LocalToWorld(addBtn.layout).center, entityLink);
             };
             rootContainer.Add(entityInspector);
             rootContainer.Add(componentsRoot);
+            inited = true;
             return rootContainer;
         }
 
         protected override void OnUpdate() {
+            if(!inited) return;
             OnPreDraw();
             OnDraw();
         }
@@ -82,6 +91,7 @@ namespace Wargon.Ecsape.Editor {
         }
         
         private void OnDraw() {
+            
             if (entityLink == null) return;
             if (entityLink.linked) {
                 var e = entityLink.Entity;
@@ -107,6 +117,7 @@ namespace Wargon.Ecsape.Editor {
                 archetypePrevious = archetypeCurrent;
             }
             else {
+                SetEntityIndex("DEAD");
                 foreach (var component in entityLink.Components) {
                     if (component == null) {
                         entityLink.Components.Remove(component);

@@ -1,5 +1,4 @@
-﻿using Unity.Collections.LowLevel.Unsafe;
-
+﻿
 namespace Wargon.Ecsape {
     using System;
     using System.Collections.Generic;
@@ -50,138 +49,6 @@ namespace Wargon.Ecsape {
         }
     }
 
-    public sealed class Archetype {
-        public readonly int id;
-        internal readonly HashSet<int> hashMask;
-        internal readonly Mask maskArray;
-        internal readonly ArrayList<Query> queries;
-        private readonly byte _worldIndex;
-        private int _queriesCount;
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private Archetype() {
-            hashMask = new HashSet<int>();
-            queries = new ArrayList<Query>(3);
-            maskArray = new Mask(hashMask);
-            id = 0;
-            _queriesCount = 0;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal Archetype(World world, HashSet<int> hashMaskSource, int archetypeId) {
-            queries = new ArrayList<Query>(10);
-            id = archetypeId;
-            _queriesCount = 0;
-            hashMask = hashMaskSource;
-            maskArray = new Mask(hashMask);
-            _worldIndex = world.Index;
-            var worldQueries = world.GetQueries();
-            var count = world.QueriesCount;
-            for (var i = 0; i < count; i++) FilterQuery(worldQueries[i]);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal Archetype(World world, ref Span<int> maskSource, int archetypeId) {
-            queries = new ArrayList<Query>(10);
-            id = archetypeId;
-            _queriesCount = 0;
-            hashMask = new HashSet<int>();
-            foreach (var i in maskSource) {
-                hashMask.Add(i);
-            }
-
-            maskArray = new Mask(hashMask);
-            _worldIndex = world.Index;
-            var worldQueries = world.GetQueries();
-            var count = world.QueriesCount;
-            for (var i = 0; i < count; i++) FilterQuery(worldQueries[i]);
-        }
-
-        public static Archetype Empty => new();
-
-        public override string ToString() {
-            var toString = "Archetype<";
-
-            foreach (var i in hashMask) toString += $"{Component.GetComponentType(i).Name}, ";
-            toString = toString.Remove(toString.Length - 2);
-            toString += ">";
-            return toString;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void AddEntity(int entityId) {
-            for (var i = 0; i < _queriesCount; i++) queries[i].OnAddWith(entityId);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void RemoveEntity(int entityId) {
-            for (var i = 0; i < _queriesCount; i++) queries[i].OnRemoveWith(entityId);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void FilterQuery(Query query) {
-            for (var q = 0; q < query.without.Count; q++) {
-                var type = query.without.Types[q];
-                if (hashMask.Contains(type)) return;
-            }
-
-            var checks = 0;
-            for (var q = 0; q < query.with.Count; q++)
-                if (hashMask.Contains(query.with.Types[q])) {
-                    checks++;
-                    if (checks == query.with.Count) {
-                        queries.Add(query);
-                        _queriesCount++;
-                        break;
-                    }
-                }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void RemoveEntityFromPools(World world, int entity) {
-            for (var i = 0; i < maskArray.Count; i++) {
-                var pool = world.GetPoolByIndex(maskArray.Types[i]);
-                //if (pool.Has(entity))
-                    pool.Remove(entity);
-            }
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal bool HasComponent(int type) {
-            return hashMask.Contains(type);
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Entity CreateEntity() {
-            var world = World.Get(_worldIndex);
-            var e = world.CreateEntity();
-            ref var componentsAmount = ref world.GetComponentAmount(in e);
-            ref var archetype = ref world.GetArchetypeId(e.Index);
-            for (var i = 0; i < maskArray.Count; i++) {
-                world.GetPoolByIndex(maskArray.Types[i]).Add(e.Index);
-                componentsAmount++;
-            }
-
-            archetype = id;
-            AddEntity(e.Index);
-            return e;
-        }
-
-        public object[] GetComponents(in Entity entity) {
-            var world = World.Get(_worldIndex);
-            var components = new object[hashMask.Count];
-            for (var i = 0; i < components.Length; i++) {
-                components[i] = world.GetPoolByIndex(maskArray.Types[i]).GetRaw(entity.Index);
-            }
-
-            return components;
-        }
-
-        public Span<ComponentType> GetComponentTypes() {
-            Span<ComponentType> span = new ComponentType[maskArray.Count];
-            for (var i = 0; i < maskArray.Count; i++) {
-                span[i] = Component.GetComponentType(maskArray.Types[i]);
-            }
-            return span;
-        }
-    }
 
     public unsafe struct FastArray<T> : IDisposable where T : unmanaged {
         private T* _buffer;
@@ -210,16 +77,15 @@ namespace Wargon.Ecsape {
         public Span<T> ToSpan() => new(_buffer, _count);
     }
 
-    public class Migrations {
-        private readonly Dictionary<int, Archetype> archetypes;
-        private readonly Dictionary<IntKey, Migration> cachedMigrations;
+    public class Archetypes {
+        private readonly Dictionary<int, Archetype> archetypesMap;
+        public readonly List<Archetype> ArchetypesList;
         private readonly World world;
         private IntKey currentMigrationKey;
 
-        internal Migrations(World worldSource) {
-            archetypes = new Dictionary<int, Archetype> {{0, Archetype.Empty}};
-            Archetypes = new List<Archetype>();
-            cachedMigrations = new Dictionary<IntKey, Migration>();
+        internal Archetypes(World worldSource) {
+            archetypesMap = new Dictionary<int, Archetype> {{0, Archetype.Empty(worldSource)}};
+            ArchetypesList = new List<Archetype>();
             world = worldSource;
             ArchetypesCount = 0;
         }
@@ -227,32 +93,42 @@ namespace Wargon.Ecsape {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal Archetype GetArchetype(int id) {
-            return archetypes[id];
+            return archetypesMap[id];
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal Archetype GetOrCreateArchetype(ref Span<int> types) {
             var id = GetCustomHashCode(ref types);
-            if (!archetypes.ContainsKey(id)) {
+            if (!archetypesMap.ContainsKey(id)) {
                 var newArchetype = new Archetype(world, ref types, id);
-                archetypes.Add(id, newArchetype);
-                Archetypes.Add(newArchetype);
+                archetypesMap.Add(id, newArchetype);
+                ArchetypesList.Add(newArchetype);
             }
 
-            return archetypes[id];
+            return archetypesMap[id];
         }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal Archetype GetOrCreateArchetype(HashSet<int> types) {
+            var id = GetCustomHashCode(types);
+            if (!archetypesMap.ContainsKey(id)) {
+                var newArchetype = new Archetype(world, types, id);
+                archetypesMap.Add(id, newArchetype);
+                ArchetypesList.Add(newArchetype);
+            }
 
+            return archetypesMap[id];
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal Archetype GetOrCreateArchetype(params int[] types) {
             var id = GetCustomHashCode(ref types);
-            if (!archetypes.ContainsKey(id)) {
+            if (!archetypesMap.ContainsKey(id)) {
                 var mask = new HashSet<int>(types);
                 var newArchetype = new Archetype(world, mask, id);
-                archetypes.Add(id, newArchetype);
-                Archetypes.Add(newArchetype);
+                archetypesMap.Add(id, newArchetype);
+                ArchetypesList.Add(newArchetype);
             }
 
-            return archetypes[id];
+            return archetypesMap[id];
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -264,17 +140,15 @@ namespace Wargon.Ecsape {
             }
 
             var id = GetCustomHashCode(ref typesSpan);
-            if (!archetypes.ContainsKey(id)) {
+            if (!archetypesMap.ContainsKey(id)) {
                 var newArchetype = new Archetype(world, ref typesSpan, id);
-                archetypes.Add(id, newArchetype);
-                Archetypes.Add(newArchetype);
+                archetypesMap.Add(id, newArchetype);
+                ArchetypesList.Add(newArchetype);
             }
 
-            return archetypes[id];
+            return archetypesMap[id];
         }
 
-        public List<Archetype> Archetypes;
-        public List<Migration> GetMigrations() => cachedMigrations.Values.ToList();
         internal int ArchetypesCount { get; private set; }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -334,90 +208,12 @@ namespace Wargon.Ecsape {
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void GetMigrationID(in int p1, in int p2, in bool p3) {
-            unchecked {
-                var hash = 17;
-                hash += p1;
-                hash += p2;
-                hash += p3 ? 1 : -1;
-                currentMigrationKey.value = hash;
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void Migrate(int entity, ref int archetypeCurrent, ref int componentType, ref bool add) {
-            GetMigrationID(in archetypeCurrent, in componentType, in add); //----+
-                                                                 //             |
-            if (HasMigration(entity, ref archetypeCurrent)) return; //<---------+
-
-            CacheArchetypes(archetypeCurrent, componentType, add, out var archetypeFrom, out var archetypeTo);
-
-            CacheMigrations(archetypeFrom.id, archetypeTo.id, componentType, add, currentMigrationKey.value,
-                out var migration);
-            migration.Execute(entity);
-            archetypeCurrent = migration.Archetype;
-        }
-
-        private void CacheMigrations(int archetypeCurrent, int archetypeToId, int componentType, bool add, int key,
-            out Migration migration) {
-            var archetypeFrom = archetypes[archetypeCurrent];
-            var archetypeTo = archetypes[archetypeToId];
-
-            var toMigrate = new Migration(key, componentType, archetypeToId);
-
-            for (var i = 0; i < archetypeFrom.queries.Count; i++) {
-                var query = archetypeFrom.queries[i];
-                if (add) {
-                    if (query.without.Contains(componentType)) {
-                        if (!toMigrate.HasQueryToRemoveEntity(query)) {
-                            toMigrate.QueriesToRemoveEntity.Add(query);
-                            toMigrate.IsEmpty = false;
-                        }
-                    }
-                }
-                else {
-                    if (query.with.Contains(componentType)) {
-                        if (!toMigrate.HasQueryToRemoveEntity(query)) {
-                            toMigrate.QueriesToRemoveEntity.Add(query);
-                            toMigrate.IsEmpty = false;
-                        }
-                    }
-                }
-            }
-
-            for (var i = 0; i < archetypeTo.queries.Count; i++) {
-                var query = archetypeTo.queries[i];
-                if (add) {
-                    if (query.with.Contains(componentType) && !archetypeFrom.hashMask.Contains(componentType) &&
-                        archetypeTo.hashMask.Contains(componentType)) {
-                        if (!toMigrate.HasQueryToAddEntity(query)) {
-                            toMigrate.QueriesToAddEntity.Add(query);
-                            toMigrate.IsEmpty = false;
-                        }
-                    }
-                }
-                else {
-                    if (query.without.Contains(componentType) && archetypeFrom.hashMask.Contains(componentType) &&
-                        !archetypeTo.hashMask.Contains(componentType)) {
-                        if (!toMigrate.HasQueryToAddEntity(query)) {
-                            toMigrate.QueriesToAddEntity.Add(query);
-                            toMigrate.IsEmpty = false;
-                        }
-                    }
-                }
-            }
-
-            cachedMigrations.Add(currentMigrationKey, toMigrate);
-            migration = toMigrate;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void CacheArchetypes(int archetypeHashFrom, int componentType, bool add,
             out Archetype archetypeFrom,
             out Archetype archetypeTo) {
             ArchetypesCount++;
 
-            archetypeFrom = archetypes[archetypeHashFrom];
+            archetypeFrom = archetypesMap[archetypeHashFrom];
 
             var mask = new HashSet<int>(archetypeFrom.hashMask);
             if (add)
@@ -426,82 +222,15 @@ namespace Wargon.Ecsape {
                 mask.Remove(componentType);
 
             var archetypeId = GetCustomHashCode(mask);
-            if (archetypes.ContainsKey(archetypeId)) {
-                archetypeTo = archetypes[archetypeId];
+            if (archetypesMap.ContainsKey(archetypeId)) {
+                archetypeTo = archetypesMap[archetypeId];
             }
             else {
                 archetypeTo = new Archetype(world, mask, archetypeId);
-                archetypes.Add(archetypeId, archetypeTo);
-                Archetypes.Add(archetypeTo);
+                archetypesMap.Add(archetypeId, archetypeTo);
+                ArchetypesList.Add(archetypeTo);
             }
         }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private bool HasMigration(int entity, ref int archetypeCurrent) {
-            if (cachedMigrations.TryGetValue(currentMigrationKey, out var migration)) {
-                migration.Execute(entity);
-                archetypeCurrent = migration.Archetype;
-                return true;
-            }
-
-            return false;
-        }
-
-        public class Migration {
-            internal readonly int Archetype;
-            internal readonly int ComponentType;
-            internal readonly int Key;
-            internal readonly ArrayList<Query> QueriesToAddEntity;
-            internal readonly ArrayList<Query> QueriesToRemoveEntity;
-            internal bool IsEmpty;
-
-            public (int, Type, int, bool) GetData() {
-                return (Archetype, Component.GetTypeOfComponent(ComponentType), Key, IsEmpty);
-            }
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            internal Migration(int key, int componentType, int archetype) {
-                Archetype = archetype;
-                ComponentType = componentType;
-                Key = key;
-                QueriesToAddEntity = new ArrayList<Query>(1);
-                QueriesToRemoveEntity = new ArrayList<Query>(1);
-                IsEmpty = true;
-            }
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public void Execute(int entity) {
-                if (IsEmpty) return;
-                for (var i = 0; i < QueriesToRemoveEntity.Count; i++) QueriesToRemoveEntity[i].OnRemoveWith(entity);
-                for (var i = 0; i < QueriesToAddEntity.Count; i++) QueriesToAddEntity[i].OnAddWith(entity);
-            }
-            
-            public bool HasQueryToAddEntity(Query query) {
-                for (int i = 0; i < QueriesToAddEntity.Count; i++) {
-                    if (QueriesToAddEntity[i].Index == query.Index)
-                        return true;
-                }
-
-                return false;
-            }
-
-            public bool HasQueryToRemoveEntity(Query query) {
-                for (int i = 0; i < QueriesToRemoveEntity.Count; i++) {
-                    if (QueriesToRemoveEntity[i].Index == query.Index)
-                        return true;
-                }
-
-                return false;
-            }
-
-            public override string ToString() {
-                return $"{Key} Migration with component:({Component.GetTypeOfComponent(ComponentType).Name})" +
-                       $"IsEmpty:({IsEmpty}) ToAdd:({QueriesToAddEntity.Count}), ToRemove:({QueriesToRemoveEntity.Count});";
-            }
-
-        }
-
-
     }
     
     internal struct IntKey : IEquatable<IntKey> {
@@ -526,11 +255,12 @@ namespace Wargon.Ecsape {
             query.without.Add(Component<T>.Index);
             return query;
         }
-
+        
         public static Query With<T>(this Query query) where T : struct, IComponent {
             query.with.Add(Component<T>.Index);
             return query;
         }
+        
         public static Query WithAll<T1,T2>(this Query query) 
             where T1 : struct, IComponent
             where T2 : struct, IComponent
@@ -595,6 +325,14 @@ namespace Wargon.Ecsape {
             query.with.Add(Component<T6>.Index);
             return query;
         }
+
+        public static Query WithAll(this Query query, params Type[] componentTypes) {
+            foreach (var componentType in componentTypes) {
+                query.With(componentType);
+            }
+            return query;
+        }
+        
         public static Query With(this Query query, Type type) {
             query.with.Add(Component.GetIndex(type));
             return query;
@@ -681,10 +419,6 @@ namespace Wargon.Ecsape {
             get=> entities.Length;
         }
 
-        public int Count {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => count;
-        }
         public bool IsEmpty {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => count == 0;
