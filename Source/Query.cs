@@ -47,8 +47,13 @@ namespace Wargon.Ecsape {
         public Span<T> AsSpan() {
             return buffer;
         }
-    }
 
+        public void Clear() {
+            Array.Clear(buffer, 0, buffer.Length);
+            capacity = 0;
+            Count = 0;
+        }
+    }
 
     public unsafe struct FastArray<T> : IDisposable where T : unmanaged {
         private T* _buffer;
@@ -90,6 +95,10 @@ namespace Wargon.Ecsape {
             ArchetypesCount = 0;
         }
 
+        internal void Clear() {
+            archetypesMap.Clear();
+            ArchetypesList.Clear();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal Archetype GetArchetype(int id) {
@@ -325,10 +334,65 @@ namespace Wargon.Ecsape {
             query.with.Add(Component<T6>.Index);
             return query;
         }
-
+        
         public static Query WithAll(this Query query, params Type[] componentTypes) {
             foreach (var componentType in componentTypes) {
                 query.With(componentType);
+            }
+            return query;
+        }
+        
+        public static Query WithAny<T1, T2>(this Query query)             
+            where T1 : struct, IComponent
+            where T2 : struct, IComponent
+        {
+            query.any.Add(Component<T1>.Index);
+            query.any.Add(Component<T2>.Index);
+            return query;
+        }
+        
+        public static Query WithAny<T1, T2, T3>(this Query query)             
+            where T1 : struct, IComponent
+            where T2 : struct, IComponent
+            where T3 : struct, IComponent
+        {
+            query.any.Add(Component<T1>.Index);
+            query.any.Add(Component<T2>.Index);
+            query.any.Add(Component<T3>.Index);
+            return query;
+        }
+        
+        public static Query WithAny<T1, T2, T3, T4>(this Query query)             
+            where T1 : struct, IComponent
+            where T2 : struct, IComponent
+            where T3 : struct, IComponent
+            where T4 : struct, IComponent
+        {
+            query.any.Add(Component<T1>.Index);
+            query.any.Add(Component<T2>.Index);
+            query.any.Add(Component<T3>.Index);
+            query.any.Add(Component<T4>.Index);
+            return query;
+        }
+        
+        public static Query WithAny<T1, T2, T3, T4, T5>(this Query query)             
+            where T1 : struct, IComponent
+            where T2 : struct, IComponent
+            where T3 : struct, IComponent
+            where T4 : struct, IComponent
+            where T5 : struct, IComponent
+        {
+            query.any.Add(Component<T1>.Index);
+            query.any.Add(Component<T2>.Index);
+            query.any.Add(Component<T3>.Index);
+            query.any.Add(Component<T4>.Index);
+            query.any.Add(Component<T5>.Index);
+            return query;
+        }
+        
+        public static Query WithAny(this Query query, params Type[] componentTypes) {
+            foreach (var componentType in componentTypes) {
+                query.any.Add(Component.GetIndex(componentType));
             }
             return query;
         }
@@ -342,6 +406,11 @@ namespace Wargon.Ecsape {
             T aspect = default;
             var types = aspect.Link();
             foreach (var type in types) query.With(type);
+            return query;
+        }
+
+        public static Query WithName(this Query query, string name) {
+            query.withName = name;
             return query;
         }
     }
@@ -379,22 +448,20 @@ namespace Wargon.Ecsape {
             }
         }
     }
-    public class Query {
+    public class Query : IEquatable<Query> {
         internal int count;
-        internal int[] entities;
-        internal int[] entityMap;
-        internal unsafe int* entitiesPtr;
-        internal unsafe int* entityMapPtr;
-        
-        internal int entityToUpdateCount;
-        internal EntityToUpdate[] entityToUpdates;
-        
-        internal int Index;
+        private int[] entities;
+        private int[] entityMap;
+        private unsafe int* entitiesPtr;
+        private unsafe int* entityMapPtr;
+        private int entityToUpdateCount;
+        private EntityToUpdate[] entityToUpdates;
+        private int Index;
         internal int indexInside;
-        
         internal Mask with;
         internal Mask without;
         internal Mask any;
+        internal string withName;
         internal bool IsDirty;
         public Query(World world) {
             WorldInternal = world;
@@ -424,23 +491,10 @@ namespace Wargon.Ecsape {
             get => count == 0;
         }
 
-        public override string ToString() {
-            var toString = $"Query({Index}).With<";
-
-            for (var i = 0; i < with.Count; i++) toString += $"{Component.GetTypeOfComponent(with.Types[i]).Name} ,";
-            toString = toString.Remove(toString.Length - 1);
-            toString += ">";
-
-            if (without.Count > 0) {
-                toString += ".Without<";
-                for (var i = 0; i < without.Count; i++)
-                    toString += $"{Component.GetTypeOfComponent(without.Types[i]).Name} ,";
-                toString = toString.Remove(toString.Length - 1);
-                toString += ">";
-            }
-
-            return toString;
+        public bool Equals(Query other) {
+            return other.Index == Index;
         }
+
 
         internal (int[], int[], EntityToUpdate[], int) GetRaw() {
             return (entities, entityMap, entityToUpdates, count);
@@ -547,6 +601,23 @@ namespace Wargon.Ecsape {
             return entities[index];
         }
 
+        public override string ToString() {
+            var toString = $"Query({Index}).With<";
+
+            for (var i = 0; i < with.Count; i++) toString += $"{Component.GetTypeOfComponent(with.Types[i]).Name} ,";
+            toString = toString.Remove(toString.Length - 1);
+            toString += ">";
+
+            if (without.Count > 0) {
+                toString += ".Without<";
+                for (var i = 0; i < without.Count; i++)
+                    toString += $"{Component.GetTypeOfComponent(without.Types[i]).Name} ,";
+                toString = toString.Remove(toString.Length - 1);
+                toString += ">";
+            }
+
+            return toString;
+        }
         internal struct EntityToUpdate {
             public int entity;
             public bool add;

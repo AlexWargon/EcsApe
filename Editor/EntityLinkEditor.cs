@@ -1,32 +1,8 @@
-﻿using System;
-using UnityEditor;
+﻿using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine.UIElements;
 
 namespace Wargon.Ecsape.Editor {
-    public abstract class UpdatableEditor : UnityEditor.Editor {
-        private DateTime timeFromLastFrame;
-        private TimeSpan timeSpan;
-        public const int msLock = 122;
-        public float deltaTime;
-        private void OnEnable() {
-            EditorApplication.update += Update;
-        }
-
-        private void OnDisable() {
-            EditorApplication.update -= Update;
-        }
-
-        private void Update() {
-            timeSpan = DateTime.Now - timeFromLastFrame;
-            if (timeSpan.Milliseconds <= msLock) return;
-            OnUpdate();
-            deltaTime = (float)timeSpan.TotalSeconds;
-            timeFromLastFrame = DateTime.Now;
-        }
-
-        protected abstract void OnUpdate();
-    }
     [CustomEditor(typeof(EntityLink))]
     public class EntityLinkEditor : UpdatableEditor {
         private int archetypeCurrent;
@@ -42,10 +18,11 @@ namespace Wargon.Ecsape.Editor {
             ComponentInspectors.Clear();
         }
         private void SetEntityIndex(string text) {
+            if(label== null) return;
             label.text = text;
         }
+        
         public override VisualElement CreateInspectorGUI() {
-            
             entityLink = target as EntityLink;
             rootContainer = new BaseVisualElement();
             rootContainer.AddVisualTree("Assets/EcsApe/Editor/Inspectors/EntityLinkEditor.uxml");

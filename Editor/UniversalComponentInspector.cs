@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEngine;
 using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
 
@@ -43,9 +44,11 @@ namespace Wargon.Ecsape {
             }
             _inspectorRoot = rootVisualElement.Q<VisualElement>("ComponentInspector");
             _foldout = rootVisualElement.Q<Foldout>("Foldout");
-            
+
             if (ComponentEditor.TryGetColor(_componentType.Name, out var color))
                 _foldout.style.backgroundColor = color;
+            else
+                _foldout.style.backgroundColor = new Color(0.27f, 0.27f, 0.29f);
             
             _children = _inspectorRoot.Q<VisualElement>("Children");
             var remove = _inspectorRoot.Q<Button>("Close");

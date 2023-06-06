@@ -1,6 +1,7 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements" MemoryProfiler="Unity.MemoryProfiler.Editor" noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="True">
     <PopupBase style="margin-left: 4px; margin-right: 4px; margin-top: 4px; margin-bottom: 4px;">
-        <ui:TextField picking-mode="Ignore" focusable="true" name="Search" usage-hints="None" is-delayed="false" multiline="false" style="position: relative; height: auto; min-height: 20px;" />
-        <ui:Label text="Components" display-tooltip-when-elided="true" style="-unity-font-style: bold; -unity-text-align: upper-center; color: rgb(255, 255, 255); top: 25px;" />
+        <ui:Label text="Components" display-tooltip-when-elided="true" style="-unity-font-style: bold; -unity-text-align: upper-center; color: rgb(255, 255, 255); top: auto;" />
+        <ui:TextField picking-mode="Ignore" focusable="true" name="Search" usage-hints="None" is-delayed="false" multiline="false" style="position: relative; height: auto; min-height: 20px; top: 1px;" />
+        <ui:VisualElement name="List" style="top: 10px;" />
     </PopupBase>
 </ui:UXML>

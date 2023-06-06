@@ -41,7 +41,7 @@ namespace Wargon.Ecsape {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void CheckResize() {
             if (_internal->count > _internal->len-64) {
-                UnityEngine.Debug.Log("RESIZE");
+
                 var newSize = _internal->len * 2;
                 _internal->Commands = NativeMagic.Resize(_internal->Commands ,newSize, _internal->len, Allocator.Persistent);
                 _internal->len = newSize;

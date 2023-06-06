@@ -253,7 +253,7 @@ namespace Wargon.Ecsape {
             public delegate void JobForEachDelegate(ref TComponent1 c1, ref TComponent2 c2);
         }
         internal unsafe delegate void JobForEachDelegateInternal(IntPtr fn, void* c1, void* c2, int entity);
-        public unsafe static void ForEach<TComponent1, TComponent2>(this ref Entities entities, ForEachJob<TComponent1, TComponent2>.JobForEachDelegate action) 
+        public unsafe static void ForEach<TComponent1, TComponent2>(this World world, ForEachJob<TComponent1, TComponent2>.JobForEachDelegate action) 
             where TComponent1 : unmanaged, IComponent
             where TComponent2 : unmanaged, IComponent
         {
@@ -266,7 +266,7 @@ namespace Wargon.Ecsape {
                         ForEachJob<TComponent1, TComponent2>.JobDelegateRunner.ForEachDelegate);
             }
 
-            var query = entities.world.GetQuery<TComponent1, TComponent2>();
+            var query = world.GetQuery<TComponent1, TComponent2>();
             var job = new ForEachJob<TComponent1, TComponent2>.JobDelegateRunner {
                 fn = ForEachJob<TComponent1, TComponent2>.CachedFn,
                 func = ForEachJob<TComponent1, TComponent2>.CahcedFunc,
@@ -277,12 +277,12 @@ namespace Wargon.Ecsape {
             job.Schedule(query.count, 64).Complete();
         }
         
-        public static void forEach<TComponent1>(this ref Entities entities,
+        public static void forEach<TComponent1>(this World world,
             Entities.ForEachDelegate<TComponent1> action)
             where TComponent1 : struct, IComponent {
 
-            var q = entities.world.GetQuery<TComponent1>();
-            var p1 = entities.world.GetPool<TComponent1>();
+            var q = world.GetQuery<TComponent1>();
+            var p1 = world.GetPool<TComponent1>();
             
             for (var i = 0; i < q.count; i++) {
                 ref var e = ref q.GetEntity(i);
@@ -290,33 +290,51 @@ namespace Wargon.Ecsape {
             }
         }
         
-        public static void forEach<TComponent1, TComponent2>(this ref Entities entities,
+        public static void forEach<TComponent1, TComponent2>(this World world,
             Entities.ForEachDelegate<TComponent1, TComponent2> action)
             where TComponent1 : struct, IComponent
             where TComponent2 : struct, IComponent {
 
-            var q = entities.world.GetQuery<TComponent1, TComponent2>();
-            var p1 = entities.world.GetPool<TComponent1>();
-            var p2 = entities.world.GetPool<TComponent2>();
+            var q = world.GetQuery<TComponent1, TComponent2>();
+            var p1 = world.GetPool<TComponent1>();
+            var p2 = world.GetPool<TComponent2>();
             
             for (var i = 0; i < q.count; i++) {
                 ref var e = ref q.GetEntity(i);
                 action(ref p1.Get(ref e), ref p2.Get(ref e));
             }
         }
-        public static void forEach<TComponent1, TComponent2, TComponent3>(this ref Entities entities,
+        public static void forEach<TComponent1, TComponent2, TComponent3>(this World world,
             Entities.ForEachDelegate<TComponent1, TComponent2, TComponent3> action)
             where TComponent1 : struct, IComponent
             where TComponent2 : struct, IComponent
             where TComponent3 : struct, IComponent {
 
-            var q = entities.world.GetQuery<TComponent1, TComponent2, TComponent3>();
-            var p1 = entities.world.GetPool<TComponent1>();
-            var p2 = entities.world.GetPool<TComponent2>();
-            var p3 = entities.world.GetPool<TComponent3>();
+            var q = world.GetQuery<TComponent1, TComponent2, TComponent3>();
+            var p1 = world.GetPool<TComponent1>();
+            var p2 = world.GetPool<TComponent2>();
+            var p3 = world.GetPool<TComponent3>();
             for (var i = 0; i < q.count; i++) {
                 ref var e = ref q.GetEntity(i);
                 action(ref p1.Get(ref e), ref p2.Get(ref e), ref p3.Get(ref e));
+            }
+        }
+        public static void forEach<TComponent1, TComponent2, TComponent3, TComponent4>(this World world,
+            Entities.ForEachDelegate<TComponent1, TComponent2, TComponent3, TComponent4> action)
+            where TComponent1 : struct, IComponent
+            where TComponent2 : struct, IComponent
+            where TComponent3 : struct, IComponent
+            where TComponent4 : struct, IComponent
+        {
+
+            var q = world.GetQuery<TComponent1, TComponent2, TComponent3, TComponent4>();
+            var p1 = world.GetPool<TComponent1>();
+            var p2 = world.GetPool<TComponent2>();
+            var p3 = world.GetPool<TComponent3>();
+            var p4 = world.GetPool<TComponent4>();
+            for (var i = 0; i < q.count; i++) {
+                ref var e = ref q.GetEntity(i);
+                action(ref p1.Get(ref e), ref p2.Get(ref e), ref p3.Get(ref e), ref p4.Get(ref e));
             }
         }
     }
@@ -326,13 +344,13 @@ namespace Wargon.Ecsape {
             (ref TComponent1 component1);
         public delegate void ForEachDelegate<TComponent1, TComponent2>
             (ref TComponent1 component1, ref TComponent2 component2);
-        public delegate void ForEachDelegate<TComponent1,TComponent2,TComponent3>
+        public delegate void ForEachDelegate<TComponent1, TComponent2, TComponent3>
             (ref TComponent1 component1, ref TComponent2 component2, ref TComponent3 component3);
-        public delegate void ForEachDelegate<TComponent1,TComponent2,TComponent3,TComponent4>
+        public delegate void ForEachDelegate<TComponent1, TComponent2, TComponent3, TComponent4>
             (ref TComponent1 component1, ref TComponent2 component2, ref TComponent3 component3, ref TComponent4 component4);
-        public delegate void ForEachDelegate<TComponent1,TComponent2,TComponent3,TComponent4,TComponent5>
+        public delegate void ForEachDelegate<TComponent1, TComponent2, TComponent3, TComponent4, TComponent5>
             (ref TComponent1 component1, ref TComponent2 component2, ref TComponent3 component3, ref TComponent4 component4, ref TComponent5 component5);
-        public delegate void ForEachDelegate<TComponent1,TComponent2,TComponent3,TComponent4,TComponent5,TComponent6>
+        public delegate void ForEachDelegate<TComponent1, TComponent2, TComponent3, TComponent4, TComponent5, TComponent6>
             (ref TComponent1 component1, ref TComponent2 component2, ref TComponent3 component3, ref TComponent4 component4, ref TComponent5 component5, ref TComponent6 component6);
         
     }

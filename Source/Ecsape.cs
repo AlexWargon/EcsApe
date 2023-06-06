@@ -45,26 +45,6 @@ namespace Wargon.Ecsape {
             }
         }
 
-        public Component(int idx, bool singleTone, bool tag, bool @event, bool clearOnEnfOfFrame,
-            bool disposable) {
-            index = idx;
-            isSingleTone = singleTone;
-            isTag = tag;
-            isEvent = @event;
-            isClearOnEnfOfFrame = clearOnEnfOfFrame;
-            isDisposable = disposable;
-        }
-
-        public readonly int index;
-        public readonly bool isSingleTone;
-        public readonly bool isTag;
-        public readonly bool isEvent;
-        public readonly bool isClearOnEnfOfFrame;
-        public readonly bool isDisposable;
-        public static Component<T> AsRef() {
-            return new Component<T>(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsDisposable);
-        }
-
         public static ComponentType AsComponentType() {
             return new ComponentType(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsDisposable, Type.Name, SizeInBytes, IsOnCreate);
         }
@@ -171,6 +151,7 @@ namespace Wargon.Ecsape {
             bool Has(int entity);
             
             static IPool New(int size, int typeIndex) {
+
                 var info = Component.GetComponentType(typeIndex);
                 var componentType = Component.GetTypeOfComponent(typeIndex);
                 var poolType = info.IsTag || info.IsSingletone || info.IsEvent ? typeof(TagPool<>)
@@ -190,37 +171,37 @@ namespace Wargon.Ecsape {
         ref T Get(ref Entity entity);
         void Set(in T component, int entity);
         void Add(in T component, int entity);
-        ref T[] GetRawData();
-        ref int[] GetRawEntities();
+        T[] GetRawData();
+        int[] GetRawEntities();
     }
 
     internal class TagPool<T> : IPool<T> where T : struct, IComponent {
         private readonly IPool self;
         private int count;
-        private T[] data;
-        private int[] entities;
-        public int Capacity => entities.Length;
+        private T data;
+        private int entities;
+        public int Capacity => 1;
         public int Count => count - 1;
         public TagPool(int size) {
-            data = new T[1];
-            entities = new int[1];
+            data = default;
+            entities = 1;
             Info = Component<T>.AsComponentType();
             count = 1;
             self = this;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T Get(int entity) {
-            return ref data[0];
+            return ref data;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T Get(ref Entity entity) {
-            return ref data[0];
+            return ref data;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Set(in T component, int entity) { }
 
         public void SetBoxed(object component, int entity) {
-            data[0] = (T) component;
+            data = (T) component;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(int entity) {
@@ -228,25 +209,25 @@ namespace Wargon.Ecsape {
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(in T component, int entity) {
-            data[0] = component;
+            data = component;
             count++;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public unsafe void AddPtr(void* component, int entity) {
-            data[0] = Marshal.PtrToStructure<T>((IntPtr)component);
+            data = Marshal.PtrToStructure<T>((IntPtr)component);
             count++;
         }
-        public ref T[] GetRawData() {
-            return ref data;
+        public T[] GetRawData() {
+            return new []{data};
         }
 
-        public ref int[] GetRawEntities() {
-            return ref entities;
+        public int[] GetRawEntities() {
+            return new []{0};
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void AddBoxed(object component, int entity) {
-            data[0] = (T)component;
+            data = (T)component;
             count++;
         }
 
@@ -255,11 +236,11 @@ namespace Wargon.Ecsape {
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         bool IPool.Has(int entity) {
-            return entities[0] > 0;
+            return entities > 0;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         void IPool.Resize(int newSize) {
-            Array.Resize(ref entities, newSize);
+            
         }
 
         public ComponentType Info { get; }
@@ -358,12 +339,12 @@ namespace Wargon.Ecsape {
             return Get(index);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ref T[] GetRawData() {
-            return ref data;
+        public T[] GetRawData() {
+            return data;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ref int[] GetRawEntities() {
-            return ref entities;
+        public int[] GetRawEntities() {
+            return entities;
         }
 
         public IPool AsIPool() {
@@ -450,12 +431,12 @@ namespace Wargon.Ecsape {
             return Get(index);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ref T[] GetRawData() {
-            return ref data;
+        public T[] GetRawData() {
+            return data;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ref int[] GetRawEntities() {
-            return ref entities;
+        public int[] GetRawEntities() {
+            return entities;
         }
 
         public IPool AsIPool() {
@@ -542,12 +523,12 @@ namespace Wargon.Ecsape {
         object IPool.GetRaw(int index) {
             return Get(index);
         }
-        public ref T[] GetRawData() {
-            return ref data;
+        public T[] GetRawData() {
+            return data;
         }
 
-        public ref int[] GetRawEntities() {
-            return ref entities;
+        public int[] GetRawEntities() {
+            return entities;
         }
 
         public IPool AsIPool() {
@@ -931,8 +912,11 @@ namespace Wargon.Ecsape {
 
     [Serializable]
     public struct Translation : IComponent {
+        /// Local
         public UnityEngine.Vector3 position;
-        public UnityEngine.Quaternion rotation;
+        /// Local
+        public UnityEngine.Quaternion rotation;        
+        /// Local
         public UnityEngine.Vector3 scale;
 
         public UnityEngine.Vector3 right {
@@ -958,6 +942,7 @@ namespace Wargon.Ecsape {
 
     public struct PlayerAspect : IAspect {
         public Entity Entity;
+
         public Translation Translation;
 
         public IEnumerable<Type> Link() {
@@ -1072,8 +1057,8 @@ namespace Wargon.Ecsape {
             foreach (var entity in query) {
                 ref var transform = ref transforms.Get(entity.Index);
                 ref var translation = ref translations.Get(entity.Index);
-                transform.value.position = translation.position;
-                transform.value.rotation = translation.rotation;
+                transform.value.localPosition = translation.position;
+                transform.value.localRotation = translation.rotation;
                 transform.value.localScale = translation.scale;
             }
         }

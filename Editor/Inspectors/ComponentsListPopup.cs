@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
@@ -16,7 +17,7 @@ namespace Wargon.Ecsape.Editor {
     public class ComponentsListPopup : EditorWindow
     {
         private EntityLink target;
-        
+        private List<string> showList = new List<string>();
         [MenuItem("Window/UI Toolkit/ComponentsListPopup")]
         public static void ShowExample(Vector2 pos, EntityLink target)
         {
@@ -36,7 +37,16 @@ namespace Wargon.Ecsape.Editor {
             var visualTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>("Assets/EcsApe/Editor/Inspectors/ComponentsListPopup.uxml");
             var labelFromUxml = visualTree.Instantiate();
             root.Add(labelFromUxml);
+            var seerchField = root.Q<TextField>("Search");
+            showList = new List<string>(ComponentEditor.Names);
             var listView = new ListView();
+            seerchField.RegisterValueChangedCallback(x => {
+                showList = ComponentEditor.Names.Where(l => l.Contains(x.newValue, StringComparison.OrdinalIgnoreCase)).ToList();
+                listView.itemsSource = showList;
+                listView.RefreshItems();
+            });
+            var listRoot = labelFromUxml.Q("List");
+            
             VisualElement MakeItem() => new Label();
             void BindItem(VisualElement e, int i) => ((Label) e).text = ComponentEditor.Names[i];
             listView.makeItem = MakeItem;
@@ -59,7 +69,7 @@ namespace Wargon.Ecsape.Editor {
                 }
                 Close();
             };
-            root.Add(listView);
+            listRoot.Add(listView);
             // VisualElement labelWithStyle = new Label("Hello World! With Style");
             // labelWithStyle.styleSheets.Add(styleSheet);
             // root.Add(labelWithStyle);

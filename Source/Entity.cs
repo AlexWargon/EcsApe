@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using Wargon.Ecsape.Components;
 
 namespace Wargon.Ecsape {
-    [StructLayout(LayoutKind.Sequential)]
+    [StructLayout(LayoutKind.Sequential)][Serializable]
     public struct Entity : IEquatable<Entity> {
         public int Index;
         internal byte WorldIndex;
@@ -27,7 +27,8 @@ namespace Wargon.Ecsape {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNull(in this Entity entity) {
-            return World.Get(entity.WorldIndex).GetComponentAmount(in entity) < 0;
+            var world = entity.GetWorld();
+            return world==null || world.GetComponentAmount(in entity) < 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -131,6 +132,40 @@ namespace Wargon.Ecsape {
         where TComponent2 : struct, IComponent {
             ValueTuple<TComponent1,TComponent2> turple = default((TComponent1, TComponent2));
             
+        }
+
+
+    }
+
+    public static class EntityExtensions2 {
+        public delegate void EntityLabmda<TComponent>(Entity entity, ref TComponent component)
+            where TComponent : struct;
+        public delegate void Labmda<TComponent>(ref TComponent component)
+            where TComponent : struct;
+        public static IfHasComponentResult<TComponent> IfHas<TComponent>(in this Entity entity)
+            where TComponent : struct, IComponent {
+            return new IfHasComponentResult<TComponent> {
+                value = entity.Has<TComponent>(),
+                Entity = entity,
+            };
+        }
+
+        public static void Then<TComponent>(in this IfHasComponentResult<TComponent> result, EntityLabmda<TComponent> labda)
+            where TComponent : struct, IComponent
+        {
+            if (result.value) {
+                labda.Invoke(result.Entity, ref result.Entity.Get<TComponent>());
+            }
+        }
+        public ref struct IfHasComponentResult<TComponent> where TComponent : struct,IComponent {
+            public bool value;
+            public Entity Entity;
+        }
+
+        public static void IfHasThen<TComponent>(in this Entity entity, Labmda<TComponent> labda) where TComponent : struct, IComponent {
+            if (entity.Has<TComponent>()) {
+                labda.Invoke(ref entity.Get<TComponent>());
+            }
         }
     }
 

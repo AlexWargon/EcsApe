@@ -3,15 +3,17 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
 namespace Wargon.Ecsape {
+    
     public sealed class Archetype {
         
         public readonly int id;
         internal readonly HashSet<int> hashMask;
-        private readonly Dictionary<int, ArchetypeEdge> Edges;
         private readonly Mask maskArray;
+        private readonly Dictionary<int, ArchetypeEdge> Edges;
         private readonly ArrayList<Query> queries;
         private readonly World world;
         private int _queriesCount;
+        
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Archetype(World world) {
             hashMask = new HashSet<int>();
@@ -29,9 +31,7 @@ namespace Wargon.Ecsape {
             Edges = new Dictionary<int, ArchetypeEdge>();
             id = archetypeId;
             _queriesCount = 0;
-            
             hashMask = hashMaskSource;
-            
             maskArray = new Mask(hashMask);
             this.world = world;
             var worldQueries = world.GetQueries();
@@ -45,12 +45,10 @@ namespace Wargon.Ecsape {
             Edges = new Dictionary<int, ArchetypeEdge>();
             id = archetypeId;
             _queriesCount = 0;
-            
             hashMask = new HashSet<int>();
             foreach (var i in maskSource) {
                 hashMask.Add(i);
             }
-
             maskArray = new Mask(hashMask);
             this.world = world;
             var worldQueries = world.GetQueries();
@@ -67,7 +65,7 @@ namespace Wargon.Ecsape {
                 world.GetArchetypeId(entity) = edge.Add.archetypeTo;
                 return;
             }
-            CreateEdges(component);
+            CreateEdges(in component);
             edge = Edges[component];
             edge.Add.Execute(in entity);
             world.GetArchetypeId(entity) = edge.Add.archetypeTo;
@@ -85,7 +83,7 @@ namespace Wargon.Ecsape {
             edge.Remove.Execute(in entity);
             world.GetArchetypeId(entity) = edge.Remove.archetypeTo;
         }
-        
+
         private void CreateEdges(in int component) {
             var maskAdd = new HashSet<int>(hashMask);
             maskAdd.Add(component);
@@ -93,68 +91,29 @@ namespace Wargon.Ecsape {
             maskRemove.Remove(component);
 
             Edges.Add(component, new(
-                GetOrCreateMigration(world.GetArchetype(maskAdd), component, true),
-                GetOrCreateMigration(world.GetArchetype(maskRemove), component, false)
+                GetOrCreateMigration(world.GetArchetype(maskAdd)),
+                GetOrCreateMigration(world.GetArchetype(maskRemove))
             ));
         }
-        
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private MigrationEdge GetOrCreateMigration(Archetype archetypeTo, int componentType, bool add) {
+        private MigrationEdge GetOrCreateMigration(Archetype archetypeNext) {
 
-            MigrationEdge migrationEdge = new (archetypeTo.id);
-
-            for (var i = 0; i < queries.Count; i++) {
+            MigrationEdge migrationEdge = new (archetypeNext.id);
+            for (int i = 0; i < queries.Count; i++) {
                 var query = queries[i];
-                if (add) {
-                    if (query.without.Contains(componentType)) {
-                        if (!migrationEdge.HasQueryToRemoveEntity(query)) {
-                            migrationEdge.QueriesToRemoveEntity.Add(query);
-                            migrationEdge.IsEmpty = false;
-                        }
-                    }
-                }
-                else {
-                    if (query.with.Contains(componentType)) {
-                        if (!migrationEdge.HasQueryToRemoveEntity(query)) {
-                            migrationEdge.QueriesToRemoveEntity.Add(query);
-                            migrationEdge.IsEmpty = false;
-                        }
-                    }
-                }
+                if(!archetypeNext.HasQuery(query))
+                    migrationEdge.AddQueryToRemoveEntity(query);
             }
-
-            for (var i = 0; i < archetypeTo.queries.Count; i++) {
-                var query = archetypeTo.queries[i];
-                if (add) {
-                    if (query.with.Contains(componentType) && !hashMask.Contains(componentType) &&
-                        archetypeTo.hashMask.Contains(componentType)) {
-                        if (!migrationEdge.HasQueryToAddEntity(query)) {
-                            migrationEdge.QueriesToAddEntity.Add(query);
-                            migrationEdge.IsEmpty = false;
-                        }
-                    }
-                }
-                else {
-                    if (query.without.Contains(componentType) && hashMask.Contains(componentType) &&
-                        !archetypeTo.hashMask.Contains(componentType)) {
-                        if (!migrationEdge.HasQueryToAddEntity(query)) {
-                            migrationEdge.QueriesToAddEntity.Add(query);
-                            migrationEdge.IsEmpty = false;
-                        }
-                    }
-                }
+            for (int i = 0; i < archetypeNext.queries.Count; i++) {
+                var query = archetypeNext.queries[i];
+                if(!HasQuery(query))
+                    migrationEdge.AddQueryToAddEntity(query);
             }
 
             return migrationEdge;
         }
-        public override string ToString() {
-            var toString = "Archetype<";
 
-            foreach (var i in hashMask) toString += $"{Component.GetComponentType(i).Name}, ";
-            toString = toString.Remove(toString.Length - 2);
-            toString += ">";
-            return toString;
-        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void AddEntity(int entityId) {
@@ -168,23 +127,47 @@ namespace Wargon.Ecsape {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void FilterQuery(Query query) {
+            if (QueryMatchWithArchetype(query)) {
+                queries.Add(query);
+                _queriesCount++;
+            }
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool QueryMatchWithArchetype(Query query) {
             for (var q = 0; q < query.without.Count; q++) {
                 var type = query.without.Types[q];
-                if (hashMask.Contains(type)) return;
+                if (hashMask.Contains(type)) return false;
             }
 
             var checks = 0;
-            for (var q = 0; q < query.with.Count; q++)
-                if (hashMask.Contains(query.with.Types[q])) {
+            for (var i = 0; i < query.with.Count; i++) {
+                if (HasComponent(query.with.Types[i])) {
                     checks++;
                     if (checks == query.with.Count) {
                         queries.Add(query);
                         _queriesCount++;
-                        break;
+                        return true;
                     }
                 }
-        }
+            }
+            
+            for (int i = 0; i < query.any.Count; i++) {
+                if(HasComponent(query.any.Types[i]))
+                    return true;
+            }
 
+            return false;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool HasQuery(Query query) {
+            for (int i = 0; i < queries.Count; i++) {
+                if (queries[i].Equals(query))
+                    return true;
+            }
+
+            return false;
+        }
+        
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void RemoveEntityFromPools(int entity) {
             for (var i = 0; i < maskArray.Count; i++) {
@@ -228,7 +211,6 @@ namespace Wargon.Ecsape {
         private class ArchetypeEdge {
             public readonly MigrationEdge Add;
             public readonly MigrationEdge Remove;
-
             public ArchetypeEdge(MigrationEdge add, MigrationEdge remove) {
                 Add = add;
                 Remove = remove;
@@ -237,9 +219,9 @@ namespace Wargon.Ecsape {
 
         private class MigrationEdge {
             internal readonly int archetypeTo;
-            internal readonly ArrayList<Query> QueriesToAddEntity;
-            internal readonly ArrayList<Query> QueriesToRemoveEntity;
-            internal bool IsEmpty;
+            private readonly ArrayList<Query> QueriesToAddEntity;
+            private readonly ArrayList<Query> QueriesToRemoveEntity;
+            private bool IsEmpty;
             
             internal MigrationEdge(int archetypeto) {
                 archetypeTo = archetypeto;
@@ -253,20 +235,42 @@ namespace Wargon.Ecsape {
                 for (var i = 0; i < QueriesToAddEntity.Count; i++) QueriesToAddEntity[i].OnAddWith(entity);
                 for (var i = 0; i < QueriesToRemoveEntity.Count; i++) QueriesToRemoveEntity[i].OnRemoveWith(entity);
             }
-            internal bool HasQueryToAddEntity(Query query) {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private bool HasQueryToAddEntity(Query query) {
                 for (int i = 0; i < QueriesToAddEntity.Count; i++) {
                     if (QueriesToAddEntity[i] == query)
                         return true;
                 }
                 return false;
             }
-            internal bool HasQueryToRemoveEntity(Query query) {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private bool HasQueryToRemoveEntity(Query query) {
                 for (int i = 0; i < QueriesToRemoveEntity.Count; i++) {
                     if (QueriesToRemoveEntity[i] == query)
                         return true;
                 }
                 return false;
             }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal void AddQueryToRemoveEntity(Query query) {
+                if(HasQueryToRemoveEntity(query)) return;
+                QueriesToRemoveEntity.Add(query);
+                IsEmpty = false;
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal void AddQueryToAddEntity(Query query) {
+                if(HasQueryToAddEntity(query)) return;
+                QueriesToAddEntity.Add(query);
+                IsEmpty = false;
+            }
+        }
+        public override string ToString() {
+            var toString = "Archetype<";
+
+            foreach (var i in hashMask) toString += $"{Component.GetComponentType(i).Name}, ";
+            toString = toString.Remove(toString.Length - 2);
+            toString += ">";
+            return toString;
         }
     }
 }

@@ -1,5 +1,7 @@
 ﻿
 
+using System.Linq;
+
 namespace Wargon.Ecsape {
     using Pools;
     using System;
@@ -7,10 +9,13 @@ namespace Wargon.Ecsape {
     using System.Runtime.CompilerServices;
     
     public partial class World {
+        
         private static readonly World[] worlds;
         private static byte lastWorldIndex;
         private readonly DirtyQueries dirtyQueries;
         private readonly ArrayList<int> freeEntities;
+        private readonly string name;
+        internal string Name => name;
         private readonly byte selfIndex;
         internal byte Index => selfIndex;
         
@@ -33,6 +38,7 @@ namespace Wargon.Ecsape {
         }
         
         private World(string name) {
+            this.name = name;
             poolSize = ENTITIES_CACHE;
             pools = new IPool[64];
             poolKeys = new int[64];
@@ -48,6 +54,29 @@ namespace Wargon.Ecsape {
             lastWorldIndex++;
             
             GetPool<DestroyEntity>();
+            systems = new Systems(this);
+        }
+
+        public void Init() => systems.Init();
+
+        internal void Destroy() {
+            
+            for (var i = 0; i < entities.Length; i++) {
+                entities[i].DestroyNow();
+            }
+            Array.Clear(pools, 0, pools.Length);
+            Array.Clear(entities, 0, entities.Length);
+            Array.Clear(poolKeys, 0, poolKeys.Length);
+            freeEntities.Clear();
+            Array.Clear(queries, 0, queries.Length);
+            Array.Clear(entityComponentsAmounts, 0, entityComponentsAmounts.Length);
+            Array.Clear(archetypeIDs, 0, archetypeIDs.Length);
+            _archetypes.Clear();
+            lastEntity=0;
+            activeEntitiesCount=0;
+            poolSize=0;
+            poolsCount=0;
+            queriesCount=0;
         }
         public static World Default {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -65,7 +94,7 @@ namespace Wargon.Ecsape {
                 dirtyQueries.Add(query);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void UpdateQueries() {
+        public void UpdateQueries() {
             dirtyQueries.UpdateQueries();
         }
 
@@ -405,6 +434,15 @@ namespace Wargon.Ecsape {
             if(ids.ContainsKey(name)) return;
             ids.Add(name,index);
         }
+
+        public static void Destory(World world) {
+            ids.Remove(world.name);
+            world.Destroy();
+            worlds[world.Index] = worlds[lastWorldIndex-1];
+            worlds[lastWorldIndex - 1] = null;
+            lastWorldIndex--;
+            world = null;
+        }
     }
     
     public partial class World {
@@ -465,6 +503,31 @@ namespace Wargon.Ecsape {
         
         public ref Entity GetEntity(int index) {
             return ref Entities[index];
+        }
+    }
+
+    public partial class World {
+        private Systems systems;
+        
+        public World Add<TSystem>() where TSystem : class, ISystem, new() {
+            systems.Add<TSystem>();
+            return this;
+        }
+
+        public World AddDIContainer(IDependencyContainer container) {
+            systems.AddInjector(container);
+            return this;
+        }
+        public World Add<T>(T system) where T : class, ISystem {
+            systems.Add(system);
+            return this;
+        }
+        public World AddGroup(Systems.Group group) {
+            systems.AddGroup(group);
+            return this;
+        }
+        public void OnUpdate(float deltaTime) {
+            systems.Update(deltaTime);
         }
     }
     public static class WorldExtensions {

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using UnityEditor;
@@ -30,6 +31,8 @@ namespace Wargon.Ecsape {
             Add<AnimationCurve>(new CurveInspector().Create());
             Add<LayerMask>(new LayerMaskInspector().Create());
             Add<List<Entity>>(new ListOfEntitiesInpsector().Create());
+            Add<Entity>(new EntityInspector().Create());
+            Add<List<EntityLink>>(new ListOfEntityLinksInspector().Create());
             inited = true;
         }
 
@@ -93,24 +96,29 @@ namespace Wargon.Ecsape {
             inspectors.Clear();
         }
     }
-    
+
+    public static class EditorUtils {
+        public static void SetDirty(Object obj) {
+            if(obj is not null)
+                EditorUtility.SetDirty(obj);
+        }
+    }
     public abstract class BaseInspector : VisualElement {
         private object data;
-        private Entity entity;
+        protected Entity TargetEntity;
         protected string fieldName = "field";
         protected bool runtimeMode;
         private bool initialized;
-        protected Func<object, ValueTask<object>> onChange;
+        protected Action<object> onChange;
         private VisualElement previousRoot;
         private object target;
-        private Object targetLink;
-        private const float updateDelay = 0.2f;
+        protected EntityLink targetLink;
         private float updateDelayCounter;
         protected abstract VisualElement GetField();
 
         private void SetTarget(object component, Object targetObj) {
             target = component;
-            targetLink = targetObj;
+            targetLink = (EntityLink)targetObj;
         }
 
         private void AddToRoot(VisualElement root) {
@@ -124,23 +132,20 @@ namespace Wargon.Ecsape {
             }
         }
 
-        public async void UpdateData(object component, Object link, FieldInfo fieldInfo, string fieldNameParam, VisualElement root, bool runTime) {
+        public void UpdateData(object component, Object link, FieldInfo fieldInfo, string fieldNameParam, VisualElement root, bool runTime) {
             if (root == previousRoot) return;
             if (initialized) return;
             AddToRoot(root);
             SetTarget(component, link);
             this.fieldName = fieldNameParam;
-            onChange = async (x) => {
-                ticksCounter = 0;
+            onChange = x => {
                 data = x;
                 fieldInfo.SetValue(target, data);
                 if (targetLink != null) {
-                    //EditorUtility.SetDirty(targetLink);
-                    await SetDirtyAsync(targetLink);
+                    EditorUtility.SetDirty(targetLink);
                 }
                 if (runtimeMode)
-                    entity.SetBoxed(target);
-                return data;
+                    TargetEntity.SetBoxed(target);
             };
             if (data != null) {
                 if(runTime)
@@ -169,7 +174,7 @@ namespace Wargon.Ecsape {
         public void Draw(object value, string fName, bool runTime, Type targetType, Entity e) {
             runtimeMode = runTime;
             fieldName = fName;
-            entity = e;
+            TargetEntity = e;
             OnDraw(value, runTime, targetType);
         }
 
@@ -340,26 +345,7 @@ namespace Wargon.Ecsape {
         }
     }
 
-    public class ObjectInspector : BaseInspector {
-        private ObjectField field;
 
-        protected override void OnDraw(object value, bool runTime, Type targetType) {
-            field.label = fieldName;
-            field.SetValueWithoutNotify((Object) value);
-            field.objectType = targetType;
-        }
-
-        protected override void OnCreate() {
-            field = new ObjectField(fieldName);
-
-            field.value = null;
-            field.RegisterValueChangedCallback(x => { onChange?.Invoke(x.newValue); });
-        }
-
-        protected override VisualElement GetField() {
-            return field;
-        }
-    }
 
     public class CurveInspector : BaseInspector {
         private CurveField field;
@@ -400,43 +386,240 @@ namespace Wargon.Ecsape {
             field.RegisterValueChangedCallback(x => { onChange?.Invoke(x.newValue); });
         }
     }
-    
-    public class ListOfEntitiesInpsector : BaseInspector {
+    public class ObjectInspector : BaseInspector {
+        private ObjectField field;
+
+        protected override void OnDraw(object value, bool runTime, Type targetType) {
+            field.label = fieldName;
+            field.SetValueWithoutNotify((Object) value);
+            field.objectType = targetType;
+        }
+
+        protected override void OnCreate() {
+            field = new ObjectField(fieldName);
+
+            field.value = null;
+            field.RegisterValueChangedCallback(x => { onChange?.Invoke(x.newValue); });
+        }
+
+        protected override VisualElement GetField() {
+            return field;
+        }
+    }
+    public class EntityInspector : BaseInspector {
+        private Label pureEntityField;
+        private ObjectField hybridEntityField;
+        private Entity fieldValue;
+        protected override VisualElement GetField() {
+            if (!fieldValue.IsNull()) {
+                if (fieldValue.Has<ViewLink>()) return hybridEntityField;
+            }
+            return pureEntityField;
+        }
+
+        protected override void OnDraw(object value, bool runTime, Type targetType) {
+            fieldValue = (Entity)value;
+            if(fieldValue.IsNull()) return;
+            if (fieldValue.Has<ViewLink>()) {
+                hybridEntityField.label = fieldName;
+                hybridEntityField.SetValueWithoutNotify(fieldValue.Get<ViewLink>().Link);
+            }
+            else {
+                var s = fieldValue.IsNull() ? "DEAD" : fieldValue.Index.ToString();
+                pureEntityField.text = $"{fieldName} {s}";
+            }
+        }
+
+        protected override void OnCreate() {
+            pureEntityField = new Label("entity X");
+            hybridEntityField = new ObjectField("entity X");
+            hybridEntityField.objectType = typeof(EntityLink);
+
+            hybridEntityField.RegisterValueChangedCallback(x => {
+                onChange?.Invoke(x.newValue);
+            });
+        }
+    }
+
+    public class ListOfEntityLinksInspector : BaseInspector {
         private ListView listView;
-        private List<Entity> items;
-        private IMGUIContainer IMGUIContainer;
-        private ReorderableList _reorderableList;
-        private Type listType;
+        private List<EntityLink> items;
+        
+        private const string ADD_BUTTON = "unity-list-view__add-button";
+        private const string REMOVE_BUTTON = "unity-list-view__remove-button";
+
+
         protected override VisualElement GetField() {
             return listView;
         }
 
         protected override void OnDraw(object value, bool runTime, Type targetType) {
-            if (value == null) value = new List<Entity>();
+            var list = (List<EntityLink>)value;
+            items = list;
+            listView.itemsSource = list;
+            listView.headerTitle = fieldName;
+            
+        }
+        int maked = 0;
+        protected override void OnCreate() {
+            if(listView is not null) return;
+            
+
+            VisualElement MakeItem() {
+                var objectField = new ObjectField("Entity");
+                objectField.label = fieldName;
+                objectField.objectType = typeof(EntityLink);
+                objectField.RegisterValueChangedCallback(x => {
+                    EditorUtils.SetDirty(targetLink);
+                    var index = (int)objectField.userData;
+                    items[index] = (EntityLink)x.newValue;
+                    //Debug.Log("1111");
+                });
+                
+                return objectField;
+            }
+            
+            void BindItems(VisualElement element, int index) {
+                element.userData = index;
+                ((ObjectField)element).value = items[index];
+                if(items[index] is not null)
+                    Debug.Log(items[index].name);
+                //Debug.Log("2222");
+            }
+
+            
+            const int itemHeight = 16;
+            listView = new ListView(items, itemHeight, MakeItem, BindItems);
+            listView.showAlternatingRowBackgrounds = AlternatingRowBackground.ContentOnly;
+            listView.showBoundCollectionSize = true;
+            listView.showBorder = true;
+            listView.showFoldoutHeader = true;
+            listView.showAddRemoveFooter = true;
+            
+            listView.selectionType = SelectionType.Single;
+            listView.onItemsChosen += objects => Debug.Log("chosen");
+            listView.onSelectionChange += objects => Debug.Log("changed");
+
+            listView.style.flexGrow = 4.0f;
+            listView.reorderMode = ListViewReorderMode.Animated;
+            listView.virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight;
+            
+            listView.headerTitle = "MyList";
+            
+            listView.reorderMode = ListViewReorderMode.Animated;
+            listView.Q<Button>(ADD_BUTTON).clicked  += () =>
+            {
+
+            };
+            listView.Q<Button>(REMOVE_BUTTON).clicked +=() => {
+
+            };
+            listView.itemsAdded += x => {
+                Debug.Log("2222");
+            };
+            listView.onSelectionChange += x => {
+                Debug.Log("3333");
+            };
+            maked = 0;
+        }
+    }
+    public class ListOfEntitiesInpsector : BaseInspector {
+        private ListView listView;
+        private List<Entity> items;
+        private List<EntityLink> viewList;
+        private IMGUIContainer IMGUIContainer;
+        private Type listType;
+
+        private const string ADD_BUTTON = "unity-list-view__add-button";
+        private const string REMOVE_BUTTON = "unity-list-view__remove-button";
+        protected override VisualElement GetField() {
+            return listView;
+        }
+
+        protected override void OnDraw(object value, bool runTime, Type targetType) {
             items = (List<Entity>)value;
-            if(items.Count ==0) items.Add(default(Entity));
             listView.itemsSource = items;
+            listView.headerTitle = fieldName;
         }
 
         protected override void OnCreate() {
 
-            Func<VisualElement> makeItem = () => new Label();
-            Action<VisualElement, int> bindItem = (e, i) => ((Label)e).text = $"Entity {items[i].GetArchetype().ToString()}";
+            Func<VisualElement> makeItem = () => {
+                var fld = new ObjectField("Entity");
+                fld.label = fieldName;
+                fld.objectType = typeof(EntityLink);
+                return fld;
+            };
+
+            void BindItems(VisualElement elements, int index) {
+                if (runtimeMode) {
+                    var entity = items[index];
+                    if (!entity.IsNull()) {
+                        if (entity.Has<ViewLink>()) {
+                            var fld = new ObjectField($"Entity {entity.Index}");
+
+                            fld.label = fieldName;
+                            fld.objectType = typeof(EntityLink);
+                            elements = fld;
+                        }
+                        else {
+                            //((Label)elements).text = $"Entity {entity.GetArchetype()}";
+                        }
+                    }
+                }
+                else {
+                    var entity = items[index];
+                    if (!entity.IsNull()) {
+                        var fld = new ObjectField($"Entity {entity.Index}");
+                        fld.label = fieldName;
+                        fld.objectType = typeof(EntityLink);
+                        elements = fld;
+                    }
+                    else {
+                        var fld = new ObjectField($"Entity");
+                        fld.label = fieldName;
+                        fld.objectType = typeof(EntityLink);
+                        elements = fld;
+                    }
+                }
+                
+            }
+
             const int itemHeight = 16;
-            // listView = new ListView(items, itemHeight, makeItem, bindItem);
-            //
-            // listView.selectionType = SelectionType.Multiple;
-            // listView.onItemsChosen += objects => Debug.Log(objects);
-            // listView.onSelectionChange += objects => Debug.Log(objects);
-            //
-            // listView.style.flexGrow = 1.0f;
-            // listView.reorderMode = ListViewReorderMode.Animated;
-            // listView.virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight;
-            // listView.showFoldoutHeader = true;
-            // listView.headerTitle = "MyList";
-            // listView.showAddRemoveFooter = true;
-            // listView.reorderMode = ListViewReorderMode.Animated;
-            _reorderableList = new ReorderableList(items, typeof(Entity));
+            listView = new ListView(items, itemHeight, makeItem, BindItems);
+            
+            listView.selectionType = SelectionType.Multiple;
+            listView.onItemsChosen += objects => Debug.Log(objects);
+            listView.onSelectionChange += objects => Debug.Log(objects);
+            listView.style.flexGrow = 1.0f;
+            listView.reorderMode = ListViewReorderMode.Animated;
+            listView.virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight;
+            listView.showFoldoutHeader = true;
+            listView.headerTitle = "MyList";
+            listView.showAddRemoveFooter = true;
+            listView.reorderMode = ListViewReorderMode.Animated;
+            listView.Q<Button>(ADD_BUTTON).clickable = new Clickable(() =>
+            {
+                if (runtimeMode) {
+                    items.Add(TargetEntity.GetWorld().CreateEntity());
+                }
+                else {
+                    items.Add(new Entity());
+                }
+                listView.Rebuild();
+            });
+            listView.Q<Button>(REMOVE_BUTTON).clickable = new Clickable(() => {
+                if(items.Count  == 0) return;
+                items.Remove(items.Last());
+                listView.Rebuild();
+            });
+            listView.RegisterCallback<UnityEngine.UIElements.DragPerformEvent>(x => {
+                if (Selection.activeObject is EntityLink entityLink) {
+                    items.Add(entityLink.Entity);
+                    listView.Rebuild();
+                }
+            }, TrickleDown.TrickleDown);
+            //_reorderableList = new ReorderableList(items, typeof(Entity));
             //_reorderableList.
         }
 

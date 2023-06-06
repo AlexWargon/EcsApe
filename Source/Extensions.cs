@@ -21,6 +21,11 @@ namespace Wargon.Ecsape {
             return list[^1];
         }
 
+        public static void LogElementsToConsole<T>(this List<T> list) {
+            for (var i = 0; i < list.Count; i++) {
+                UnityEngine.Debug.Log(list[i].ToString());
+            }
+        }
         public static T RandomElement<T>(this System.Collections.Generic.List<T> list) {
             var random = new Random();
             return list[random.Next(list.Count)];
@@ -97,8 +102,8 @@ namespace Wargon.Ecsape {
 
         public unsafe NativePoolWrapped(IPool<T> pool) {
             count = pool.Count;
-            ref var d = ref pool.GetRawData();
-            ref var e = ref pool.GetRawEntities();
+            var d = pool.GetRawData();
+            var e = pool.GetRawEntities();
             data = NativeMagic.WrapToNative(ref d).Array;
             entities = NativeMagic.WrapToNative(ref e).Array;
         }
@@ -110,8 +115,12 @@ namespace Wargon.Ecsape {
             data[entities[entity]] = component;
         }
     }
+
+    public unsafe interface INativeContainer<T1>  where T1 : unmanaged {
+        void UpdateData(T1* ptr1, int* ptr2);
+    }
     [StructLayout(LayoutKind.Sequential)]
-    public unsafe struct NativePool<T> where T : unmanaged, IComponent {
+    public unsafe struct NativePool<T> : INativeContainer<T> where T : unmanaged, IComponent {
 
         internal int count;
         [NativeDisableUnsafePtrRestriction]
@@ -126,6 +135,11 @@ namespace Wargon.Ecsape {
                 entities = entitiesPtr;
             }
             count = pool.Count;
+        }
+
+        public void UpdateData(T* ptr1, int* ptr2) {
+            data = ptr1;
+            entities = ptr2;
         }
         public ref T Get(int entity) {
             return ref data[entities[entity]];
@@ -155,6 +169,7 @@ namespace Wargon.Ecsape {
             entities[entity] = 0;
             count--;
         }
+
     }
     [StructLayout(LayoutKind.Sequential)]
     public unsafe struct NativeQuery {

@@ -4,7 +4,7 @@ using System.Reflection;
 
 namespace Wargon.Ecsape {
     public class DependencyContainer : IDependencyContainer {
-        private readonly IDictionary<Type, IDependencyContext> constexts;
+        private readonly Dictionary<Type, IDependencyContext> constexts;
 
         internal DependencyContainer() {
             constexts = new Dictionary<Type, IDependencyContext>();
@@ -62,6 +62,11 @@ namespace Wargon.Ecsape {
 
         internal DependencyContext(IDependencyContainer container) {
             this.container = container;
+
+        }
+        internal DependencyContext(IDependencyContainer container, object instance) {
+            this.container = container;
+            this.instance = instance;
         }
         IDependencyContext IDependencyContext.From<T>() {
             instance = Activator.CreateInstance(typeof(T));
