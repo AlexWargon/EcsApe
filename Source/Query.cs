@@ -415,37 +415,17 @@ namespace Wargon.Ecsape {
         }
     }
 
-    public unsafe class WrappedNativeArray<T> where T : unmanaged {
-        private T* ptr;
-        private T[] array;
-        private int len;
+    public class WithAttribute : Attribute {
+        public Type[] Types;
+        public WithAttribute(params Type[] types) {
+            Types = types;
+        }
+    }
 
-        public T this[int index] {
-            get => ptr[index];
-            set => ptr[index] = value;
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public WrappedNativeArray(int size) {
-            array = new T[size];
-            fixed (T* arrayPtr = array) {
-                ptr = arrayPtr;
-            }
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Resize(int newSize) {
-            len = newSize;
-            Array.Resize(ref array, len);
-            fixed (T* arrayPtr = array) {
-                ptr = arrayPtr;
-            }
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Resize() {
-            len += 16;
-            Array.Resize(ref array, len);
-            fixed (T* arrayPtr = array) {
-                ptr = arrayPtr;
-            }
+    public class WithoutAttribute : Attribute {
+        public Type[] Types;
+        public WithoutAttribute(params Type[] types) {
+            Types = types;
         }
     }
     public class Query : IEquatable<Query> {

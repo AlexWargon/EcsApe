@@ -32,7 +32,7 @@ namespace Wargon.Ecsape {
                 var fieldType = fieldInfo.FieldType;
 
                 if (constexts.TryGetValue(fieldType, out var context1)) {
-                    Debug.Log($"ATTACH [{context1.GetInstance().GetType()} {fieldInfo.Name}] TO [{instance.GetType()}]");
+                    //Debug.Log($"ATTACH [{context1.GetInstance().GetType()} {fieldInfo.Name}] TO [{instance.GetType()}]");
                     fieldInfo.SetValue(instance, context1.GetInstance());
                 }
             }

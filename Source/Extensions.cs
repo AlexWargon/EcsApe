@@ -64,14 +64,6 @@ namespace Wargon.Ecsape {
         public static NativePool<T> GetPoolNative<T>(this World world) where T : unmanaged, IComponent {
             return world.GetPool<T>().AsNative();
         }
-
-        public static NativePoolWrapped<T> AsWrapped<T>(this IPool<T> pool) where T : unmanaged, IComponent {
-            return new NativePoolWrapped<T>(pool);
-        }
-        // public static void RunParallel<T>(this T job, int arrayLen) where T : struct, IJobParallelFor {
-        //     job.Schedule(arrayLen, 64).Complete();
-        // }
-
     }
 
     public ref struct IntEnumerator {
@@ -95,26 +87,6 @@ namespace Wargon.Ecsape {
         }
     }
 
-    public struct NativePoolWrapped<T> where T : unmanaged, IComponent {
-        internal int count;
-        public NativeArray<T> data;
-        public NativeArray<int> entities;
-
-        public unsafe NativePoolWrapped(IPool<T> pool) {
-            count = pool.Count;
-            var d = pool.GetRawData();
-            var e = pool.GetRawEntities();
-            data = NativeMagic.WrapToNative(ref d).Array;
-            entities = NativeMagic.WrapToNative(ref e).Array;
-        }
-
-        public T Get(int entity) {
-            return data[entities[entity]];
-        }
-        public void Set(int entity, in T component) {
-            data[entities[entity]] = component;
-        }
-    }
 
     public unsafe interface INativeContainer<T1>  where T1 : unmanaged {
         void UpdateData(T1* ptr1, int* ptr2);
@@ -217,20 +189,6 @@ namespace Wargon.Ecsape {
         }
     }
 
-    internal struct NativeMask {
-        private readonly NativeArray<int>.ReadOnly items;
-        private int Count;
-        public NativeMask(in Mask mask) {
-            items = new NativeArray<int>(mask.Types, Allocator.TempJob).AsReadOnly();
-            Count = mask.Count;
-        }
-    }
-    
-    public interface IPoolObserver {
-        void OnAddWith(int entity);
-        void OnRemoveWith(int entity);
-    }
-    
     public static class NativeMagic
     {
         public static unsafe ref T As<T>(void* ptr) where T : unmanaged {

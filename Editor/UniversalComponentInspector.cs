@@ -13,15 +13,24 @@ namespace Wargon.Ecsape {
         public BaseVisualElement() {
             rootVisualElement = new VisualElement();
         }
-        public void AddVisualTree(string path) {
+        internal void AddVisualTree(string path) {
             var visualTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(path);
             var labelFromUxml = visualTree.Instantiate();
             rootVisualElement.Add(labelFromUxml);
         }
 
-        public void AddStyleSheet(string path) {
+        internal void AddVisualTree(VisualTreeAsset asset) {
+            var labelFromUxml = asset.Instantiate();
+            rootVisualElement.Add(labelFromUxml);
+        }
+        
+        internal void AddStyleSheet(string path) {
             var styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(path);
             rootVisualElement.styleSheets.Add(styleSheet);
+        }
+        
+        internal void AddStyleSheet(StyleSheet asset) {
+            rootVisualElement.styleSheets.Add(asset);
         }
     }
     public class UniversalComponentInspector : BaseVisualElement {
@@ -96,7 +105,10 @@ namespace Wargon.Ecsape {
             if(parent.Contains(_inspectorRoot))
                 parent.Remove(_inspectorRoot);
         }
+        
         private void CheckRoot(VisualElement root) {
+            if(_inspectorRoot == null) return;
+            if(root == null) return;
             if (!root.Contains(_inspectorRoot)) {
                 root.Add(_inspectorRoot);
             }

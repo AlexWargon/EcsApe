@@ -9,6 +9,7 @@ using UnityEditor.UIElements;
 using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Wargon.Ecsape.Editor;
 using Object = UnityEngine.Object;
 
 namespace Wargon.Ecsape {
@@ -85,8 +86,8 @@ namespace Wargon.Ecsape {
             if (inspectors.TryGetValue(type, out var inspector))
                 return inspector;
             var newInspector = new UniversalComponentInspector();
-            newInspector.AddVisualTree("Assets/EcsApe/Editor/Inspectors/ComponentInspector.uxml");
-            newInspector.AddStyleSheet("Assets/EcsApe/Editor/Inspectors/ComponentInspector.uss");
+            newInspector.AddVisualTree(Styles.Confing.ComponentInspectorUXML);
+            newInspector.AddStyleSheet(Styles.Confing.ComponentInspectorUSS);
             newInspector.Init(type);
             inspectors.Add(type, newInspector);
             return newInspector;

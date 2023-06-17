@@ -1,8 +1,4 @@
-﻿
-
-using System.Linq;
-
-namespace Wargon.Ecsape {
+﻿namespace Wargon.Ecsape {
     using Pools;
     using System;
     using System.Collections.Generic;
@@ -55,6 +51,8 @@ namespace Wargon.Ecsape {
             
             GetPool<DestroyEntity>();
             systems = new Systems(this);
+            systems.AddInjector(DI.GetOrCreateContainer());
+            systems.Add<ConvertEntitySystem>();
         }
 
         public void Init() => systems.Init();
@@ -87,6 +85,8 @@ namespace Wargon.Ecsape {
         public static ref World Get(byte index) {
             return ref worlds[index];
         }
+
+        #region Queries
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void AddDirtyQuery(Query query) {
@@ -127,6 +127,11 @@ namespace Wargon.Ecsape {
         internal Query GetQueryInternal(int index) {
             return queries[index];
         }
+
+        #endregion
+        
+        #region Entities
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public unsafe Entity CreateEntity() {
 
@@ -173,7 +178,7 @@ namespace Wargon.Ecsape {
             activeEntitiesCount--;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void OnDestroyEntity(in Entity entity, ref sbyte componentsAmount) {
+        private void OnDestroyEntity(in Entity entity, ref sbyte componentsAmount) {
             var index = entity.Index;
             ref var archetype = ref GetArchetypeId(index);
             var archetypeRef = _archetypes.GetArchetype(archetype);
@@ -184,6 +189,11 @@ namespace Wargon.Ecsape {
             componentsAmount = -1;
             activeEntitiesCount--;
         }
+        
+        #endregion
+        
+        #region Pools
+
         public void CreatePool<T>() where T : struct, IComponent {
             var idx = Component<T>.Index;
             if (idx >= poolKeys.Length - 1) Array.Resize(ref poolKeys, idx + 4);
@@ -227,6 +237,9 @@ namespace Wargon.Ecsape {
         internal ref sbyte GetComponentAmount(in Entity entity) {
             return ref entityComponentsAmounts[entity.Index];
         }
+        #endregion
+        
+        #region Acrhetypes
 
         private readonly Archetypes _archetypes;
 
@@ -265,6 +278,10 @@ namespace Wargon.Ecsape {
         internal Archetype GetArchetype(int mask) {
             return _archetypes.GetArchetype(mask);
         }
+        #endregion
+
+        #region Internals
+
         public int ArchetypesCountInternal() => _archetypes.ArchetypesCount;
 
         public List<Archetype> ArchetypesInternal() => _archetypes.ArchetypesList;
@@ -278,6 +295,9 @@ namespace Wargon.Ecsape {
         public int ComponentsCountInternal(Entity entity) {
             return entityComponentsAmounts[entity.Index];
         }
+        #endregion
+
+        #region CreateEntities
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Entity CreateEntity<TC1, TC2>(in TC1 component1, in TC2 component2)
@@ -390,6 +410,8 @@ namespace Wargon.Ecsape {
             archetype.AddEntity(e.Index);
             return e;
         }
+        #endregion
+        
     }
     
     public partial class World {
@@ -505,9 +527,9 @@ namespace Wargon.Ecsape {
             return ref Entities[index];
         }
     }
-
+    #region Systems
     public partial class World {
-        private Systems systems;
+        private readonly Systems systems;
         
         public World Add<TSystem>() where TSystem : class, ISystem, new() {
             systems.Add<TSystem>();
@@ -530,6 +552,9 @@ namespace Wargon.Ecsape {
             systems.Update(deltaTime);
         }
     }
+
+    #endregion Systems
+    
     public static class WorldExtensions {
         internal static Dictionary<int, Query> Queries = new Dictionary<int, Query>();
         public static Query GetQuery<T1>(this World world) where T1 : struct, IComponent {

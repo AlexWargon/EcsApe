@@ -25,9 +25,9 @@ namespace Wargon.Ecsape.Editor {
         public override VisualElement CreateInspectorGUI() {
             entityLink = target as EntityLink;
             rootContainer = new BaseVisualElement();
-            rootContainer.AddVisualTree("Assets/EcsApe/Editor/Inspectors/EntityLinkEditor.uxml");
-            rootContainer.AddStyleSheet("Assets/EcsApe/Editor/Inspectors/EntityLinkEditor.uss");
-            
+
+            rootContainer.AddVisualTree(Styles.Confing.EntityLinkEditorUXML);
+            rootContainer.AddStyleSheet(Styles.Confing.EntityLinkEditorUSS);
             componentsRoot = new VisualElement();
             
             var entityInspector = rootContainer.Root.Q<VisualElement>("EntityInpector");
@@ -48,8 +48,7 @@ namespace Wargon.Ecsape.Editor {
             
             var addBtn = entityInspector.Q<Button>("Add");
             addBtn.clickable.clicked += () => {
-                //Debug.Log("Add");
-                ComponentsListPopup.ShowExample(addBtn.LocalToWorld(addBtn.layout).center, entityLink);
+                ComponentsListPopup.Show(addBtn.LocalToWorld(addBtn.layout).center, entityLink);
             };
             rootContainer.Add(entityInspector);
             rootContainer.Add(componentsRoot);
@@ -82,24 +81,29 @@ namespace Wargon.Ecsape.Editor {
                 archetypeCurrent = archetype.id;
                 if (archetypeCurrent != archetypePrevious) componentsRoot.Clear();
                 componentsCache = archetype.GetComponents(in e);
-                foreach (var component in componentsCache) {
+                for (var index = 0; index < componentsCache.Length; index++) {
+                    var component = componentsCache[index];
                     if (component == null) {
                         entityLink.Components.Remove(component);
                         continue;
                     }
+
                     var inspector = ComponentInspectors.Get(component.GetType());
                     inspector.DrawRunTime(component, componentsRoot, e);
                 }
 
+                
                 archetypePrevious = archetypeCurrent;
             }
             else {
                 SetEntityIndex("DEAD");
-                foreach (var component in entityLink.Components) {
+                for (var index = 0; index < entityLink.Components.Count; index++) {
+                    var component = entityLink.Components[index];
                     if (component == null) {
                         entityLink.Components.Remove(component);
                         continue;
                     }
+
                     ComponentInspectors.Get(component.GetType())
                         .DrawEditor(component, componentsRoot, entityLink, entityLink.Components);
                 }

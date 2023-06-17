@@ -7,19 +7,13 @@ using UnityEngine.UIElements;
 
 
 namespace Wargon.Ecsape.Editor {
-    public class EmptyPopupWindow : VisualElement {
-        public new class UxmlFactory : UxmlFactory<EmptyPopupWindow>{}
 
-        public EmptyPopupWindow() {
-            
-        }
-    }
     public class ComponentsListPopup : EditorWindow
     {
         private EntityLink target;
         private List<string> showList = new List<string>();
         [MenuItem("Window/UI Toolkit/ComponentsListPopup")]
-        public static void ShowExample(Vector2 pos, EntityLink target)
+        public static void Show(Vector2 pos, EntityLink target)
         {
             ComponentsListPopup wnd = GetWindow<ComponentsListPopup>();
             wnd.SetTarget(target);
@@ -28,14 +22,14 @@ namespace Wargon.Ecsape.Editor {
         }
 
         public void SetTarget(EntityLink link) => target = link;
+        
         public void CreateGUI()
         {
-            // Each editor window contains a root VisualElement object
             var root = rootVisualElement;
 
-            // Import UXML
-            var visualTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>("Assets/EcsApe/Editor/Inspectors/ComponentsListPopup.uxml");
+            var visualTree = Styles.Confing.ComponentsListPopupUXML;
             var labelFromUxml = visualTree.Instantiate();
+            
             root.Add(labelFromUxml);
             var seerchField = root.Q<TextField>("Search");
             showList = new List<string>(ComponentEditor.Names);
@@ -70,9 +64,6 @@ namespace Wargon.Ecsape.Editor {
                 Close();
             };
             listRoot.Add(listView);
-            // VisualElement labelWithStyle = new Label("Hello World! With Style");
-            // labelWithStyle.styleSheets.Add(styleSheet);
-            // root.Add(labelWithStyle);
         }
     }
 }

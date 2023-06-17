@@ -13,11 +13,10 @@ namespace Wargon.Ecsape
         public ConvertOption option;
         private Entity entity;
         public ref Entity Entity => ref entity;
-        [SerializeReference] public List<object> Components = new();
+        [SerializeReference] public List<object> Components;
         private void Start() {
             if(linked) return;
             entity = World.GetOrCreate(WorldName).CreateEntity();
-            //entity = World.Default.CreateEntity(ComponentTypes.AsSpan());
             entity.Add(new GameObjectSpawnedEvent{Link = this});
         }
 
@@ -41,7 +40,7 @@ namespace Wargon.Ecsape
                 entity.AddBoxed(component);
             }
             
-            entity.Add(new View{GameObject = gameObject});
+            entity.Add(new ViewGO{GameObject = gameObject});
             entity.Add(new ViewLink{Link = this});
             if (!entity.Has<TransformReference>()) {
                 entity.Add(new TransformReference{value = transform});
@@ -66,7 +65,7 @@ namespace Wargon.Ecsape
                 }
         }
     }
-    public struct View : IComponent, IDisposable {
+    public struct ViewGO : IComponent, IDisposable {
         public GameObject GameObject;
         public void Dispose() {
             Object.Destroy(GameObject);
@@ -93,22 +92,6 @@ namespace Wargon.Ecsape
         void Link(ref Entity entity);
     }
     
-    public abstract class ComponentLink : MonoBehaviour, IComponentLink {
-        public void Destroy() {
-            Destroy(this);
-        }
-        public abstract ComponentType ComponentType { get; }
-        public abstract void Link(ref Entity entity);
-    }
-    
-    public abstract class ComponentLink<T> : ComponentLink where T : struct, IComponent {
-        public T value;
-        public override ComponentType ComponentType  => Component<T>.AsComponentType();
-        public override void Link(ref Entity entiy) {
-            entiy.Add(value);
-        }
-    }
-
     internal struct GameObjectSpawnedEvent : IComponent {
         public IEntityLink Link;
     }
@@ -120,11 +103,6 @@ namespace Wargon.Ecsape
         public void OnCreate(World world) {
             _gameObjects = world.GetQuery().With<GameObjectSpawnedEvent>();
             _pool = world.GetPool<GameObjectSpawnedEvent>();
-
-            // foreach (var monoLink in Object.FindObjectsOfType<EntityLink>()) {
-            //     var e = world.CreateEntity();
-            //     monoLink.Link(ref e);
-            // }
         }
         
         public void OnUpdate(float deltaTime) {

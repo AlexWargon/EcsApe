@@ -91,6 +91,10 @@ namespace Wargon.Ecsape {
             return World.Get(entity.WorldIndex).GetComponentAmount(in entity);
         }
 
+        /// <summary>
+        /// Destory at the end of the frame
+        /// </summary>
+        /// <param name="entity"></param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Destroy(in this Entity entity) {
             ref var world = ref World.Get(entity.WorldIndex);
@@ -98,7 +102,10 @@ namespace Wargon.Ecsape {
             //world.MigrateEntity(entity.Index, ref world.GetArchetypeId(entity.Index), Component.DESTROY_ENTITY, true);
             world.ChangeEntityArchetype(in entity.Index, Component.DESTROY_ENTITY, true);
         }
-
+        /// <summary>
+        /// Destroy right now (not recomened)
+        /// </summary>
+        /// <param name="entity"></param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void DestroyNow(in this Entity entity) {
             World.Get(entity.WorldIndex).OnDestroyEntity(in entity);
