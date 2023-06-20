@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Wargon.Ecsape
 {
-    public class CollisionEmitter : MonoBehaviour, IComponentLink {
+    public class CollisionEmitter : MonoBehaviour {
         private Entity entity;
         public LayerMask targets;
         private void OnTriggerEnter2D(Collider2D other) {
@@ -18,9 +18,6 @@ namespace Wargon.Ecsape
             
         }
         public ComponentType ComponentType { get; }
-        public void Link(ref Entity entity) {
-            this.entity = entity;
-        }
     }
 
     public struct OnTriggerEnter : IComponent {

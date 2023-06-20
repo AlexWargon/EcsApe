@@ -341,7 +341,12 @@ namespace Wargon.Ecsape {
             }
             return query;
         }
-        
+        public static Query WithNone(this Query query, params Type[] componentTypes) {
+            foreach (var componentType in componentTypes) {
+                query.Without(componentType);
+            }
+            return query;
+        }
         public static Query WithAny<T1, T2>(this Query query)             
             where T1 : struct, IComponent
             where T2 : struct, IComponent
@@ -401,7 +406,10 @@ namespace Wargon.Ecsape {
             query.with.Add(Component.GetIndex(type));
             return query;
         }
-
+        public static Query Without(this Query query, Type type) {
+            query.without.Add(Component.GetIndex(type));
+            return query;
+        }
         public static Query Aspect<T>(this Query query) where T : struct, IAspect {
             T aspect = default;
             var types = aspect.Link();
@@ -415,14 +423,14 @@ namespace Wargon.Ecsape {
         }
     }
 
-    public class WithAttribute : Attribute {
+    public sealed class WithAttribute : Attribute {
         public Type[] Types;
         public WithAttribute(params Type[] types) {
             Types = types;
         }
     }
 
-    public class WithoutAttribute : Attribute {
+    public sealed class WithoutAttribute : Attribute {
         public Type[] Types;
         public WithoutAttribute(params Type[] types) {
             Types = types;

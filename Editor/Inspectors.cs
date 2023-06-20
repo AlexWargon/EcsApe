@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using Rogue;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEditorInternal;
@@ -20,20 +21,25 @@ namespace Wargon.Ecsape {
         private static void Init() {
             if(inited) return;
             
-            Add<int>(new IntInspector().Create());
-            Add<string>(new StringInspector().Create());
-            Add<Object>(new ObjectInspector().Create());
-            Add<float>(new FloatInspector().Create());
-            Add<Vector2>(new Vector2Inspector().Create());
-            Add<Vector3>(new Vector3Inspector().Create());
-            Add<Vector4>(new Vector4Inspector().Create());
-            Add<Quaternion>(new QuaternionInspector().Create());
-            Add<bool>(new BoolInspector().Create());
-            Add<AnimationCurve>(new CurveInspector().Create());
-            Add<LayerMask>(new LayerMaskInspector().Create());
-            Add<List<Entity>>(new ListOfEntitiesInpsector().Create());
-            Add<Entity>(new EntityInspector().Create());
-            Add<List<EntityLink>>(new ListOfEntityLinksInspector().Create());
+            Add<int>(new IntInspector());
+            Add<string>(new StringInspector());
+            Add<Object>(new ObjectInspector());
+            Add<float>(new FloatInspector());
+            Add<Vector2>(new Vector2Inspector());
+            Add<Vector3>(new Vector3Inspector());
+            Add<Vector4>(new Vector4Inspector());
+            Add<Quaternion>(new QuaternionInspector());
+            Add<bool>(new BoolInspector());
+            Add<AnimationCurve>(new CurveInspector());
+            Add<LayerMask>(new LayerMaskInspector());
+            Add<List<Entity>>(new ListOfEntitiesInpsector());
+            Add<Entity>(new EntityInspector());
+            Add<List<EntityLink>>(new ListOfEntityLinksInspector());
+            Add<Enum>(new EnumInspector());
+            
+            foreach (var inspectorsValue in inspectors.Values) {
+                inspectorsValue.Create();
+            }
             inited = true;
         }
 
@@ -44,18 +50,19 @@ namespace Wargon.Ecsape {
         public static void Clear() {
             inited = false;
         }
-        public static BaseInspector Create(Type type) {
+        public static BaseInspector New(Type type) {
             //Debug.Log($"TRY CREATE INSPECTOR TYPE OF {type.Name}");
             var typeToSearch = type;
             if (typeToSearch.IsSubclassOf(typeof(Object)))
                 typeToSearch = typeof(Object);
+            if (typeToSearch.IsEnum)
+                typeToSearch = typeof(Enum);
             if (inspectors.TryGetValue(typeToSearch, out var inspector)) {
                 var typeToCreate = inspector.GetType();
                 var newInspector = (BaseInspector)Activator.CreateInstance(typeToCreate);
                 newInspector.Create();
                 return newInspector;
             }
-
             return null;
         }
 
@@ -318,13 +325,13 @@ namespace Wargon.Ecsape {
             return field;
         }
         private Vector4 toVector3(Quaternion q) {
-            return q.eulerAngles;
+            return q.eulerAngles.normalized;
         }
         private Vector4 toVector(Quaternion q) {
             return new Vector4(q.x, q.y, q.z, q.w);
         }
         private Quaternion toQuaternion(Vector3 v) {
-            return Quaternion.Euler(v);
+            return Quaternion.Euler(v.normalized);
         }
     }
     public class BoolInspector : BaseInspector {
@@ -538,6 +545,9 @@ namespace Wargon.Ecsape {
         }
 
         protected override void OnDraw(object value, bool runTime, Type targetType) {
+            if (value == null) {
+                value = new List<Entity>();
+            }
             items = (List<Entity>)value;
             listView.itemsSource = items;
             listView.headerTitle = fieldName;
@@ -547,7 +557,7 @@ namespace Wargon.Ecsape {
 
             Func<VisualElement> makeItem = () => {
                 var fld = new ObjectField("Entity");
-                fld.label = fieldName;
+                fld.label = "element";
                 fld.objectType = typeof(EntityLink);
                 return fld;
             };
@@ -591,7 +601,7 @@ namespace Wargon.Ecsape {
             
             listView.selectionType = SelectionType.Multiple;
             listView.onItemsChosen += objects => Debug.Log(objects);
-            listView.onSelectionChange += objects => Debug.Log(objects);
+            //listView.onSelectionChange += objects => Debug.Log(objects);
             listView.style.flexGrow = 1.0f;
             listView.reorderMode = ListViewReorderMode.Animated;
             listView.virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight;
@@ -631,6 +641,25 @@ namespace Wargon.Ecsape {
         {
             var label = (Label)item;
             label.text = items[index].Index.ToString();
+        }
+    }
+    
+    public class EnumInspector : BaseInspector {
+        private EnumField field;
+
+        protected override VisualElement GetField() {
+            return field;
+        }
+
+        protected override void OnDraw(object value, bool runTime, Type targetType) {
+            field.label = fieldName;
+            field.Init((Enum) value);
+        }
+
+        protected override void OnCreate() {
+            field = new EnumField(fieldName);
+            field.value = default;
+            field.RegisterValueChangedCallback(x => { onChange?.Invoke(x.newValue); });
         }
     }
 }

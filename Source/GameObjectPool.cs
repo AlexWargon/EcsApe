@@ -16,7 +16,7 @@ namespace Wargon.Ecsape {
     }
 
     public static class EntityPoolExtensions {
-        public static void FreeView(in this Entity entity) {
+        public static void FreeView(ref this Entity entity) {
             entity.Remove<Pooled>();
         }
     }
@@ -124,7 +124,7 @@ namespace Wargon.Ecsape {
             var newPool = new Pool<EntityLink>(prefab, 16);
             newPool.OnCreate(x => {
                 var o = Object.Instantiate(x, newPool.parent);
-                if (!o.linked) {
+                if (!o.Linked) {
                     var e = World.Default.CreateEntity();
                     o.Link(ref e);
                 }
@@ -223,7 +223,7 @@ namespace Wargon.Ecsape {
             var newPool = new ObjectPool<EntityLink>(
                 () => {
                     var o = Object.Instantiate(prefab);
-                    if (!o.linked) {
+                    if (!o.Linked) {
                         var e = World.Default.CreateEntity();
                         o.Link(ref e);
                     }

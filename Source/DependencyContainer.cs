@@ -36,6 +36,15 @@ namespace Wargon.Ecsape {
                     fieldInfo.SetValue(instance, context1.GetInstance());
                 }
             }
+
+            // var contructMethod = type.GetMethod("Contruct");
+            // var parameters = contructMethod.GetParameters();
+            // var list = new List<object>();
+            // foreach (var parameterInfo in parameters) {
+            //     list.Add(constexts[type].GetInstance());
+            // }
+            //
+            // contructMethod.Invoke(instance, list.ToArray());
         }
 
         public T Get<T>() where T : class {

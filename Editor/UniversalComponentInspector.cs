@@ -41,11 +41,12 @@ namespace Wargon.Ecsape {
         private VisualElement _children;
         private Label _label;
         private Action _onClickRemove;
-        public void Init(Type cType) {
-            _componentType = cType;
+        
+        public void Init(Type componentType) {
+            _componentType = componentType;
             var fields = _componentType.GetFields();
             foreach (var fieldInfo in fields) {
-                var newInspector = Inspectors.Create(fieldInfo.FieldType);
+                var newInspector = Inspectors.New(fieldInfo.FieldType);
                 if (newInspector != null) {
                     rootVisualElement.Add(newInspector);
                     _inspectors.Add(fieldInfo.Name, newInspector);
@@ -95,15 +96,6 @@ namespace Wargon.Ecsape {
                 inspector.UpdateData(component,null, fieldInfo ,name, _children, true);
                 inspector.Draw(fieldInfo.GetValue(component), fieldInfo.Name,true, fieldInfo.FieldType, entity);
             }
-        }
-
-        public void AddTo(VisualElement parent) {
-            parent.Add(_inspectorRoot);
-        }
-
-        public void RemoveFrom(VisualElement parent) {
-            if(parent.Contains(_inspectorRoot))
-                parent.Remove(_inspectorRoot);
         }
         
         private void CheckRoot(VisualElement root) {

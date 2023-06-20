@@ -21,6 +21,15 @@ namespace Wargon.Ecsape {
             return list[^1];
         }
 
+        public static List<T> RemoveNulls<T>(this List<T> list) where T : class {
+            for (var i = 0; i < list.Count; i++) {
+                var item = list[i];
+                if (item is null) list.RemoveAt(i);
+            }
+
+            return list;
+        }
+
         public static void LogElementsToConsole<T>(this List<T> list) {
             for (var i = 0; i < list.Count; i++) {
                 UnityEngine.Debug.Log(list[i].ToString());
@@ -58,11 +67,15 @@ namespace Wargon.Ecsape {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NativeQuery AsNative(this Query query) {
             //query.WorldInternal.AddDirtyQuery(query);
-            return new NativeQuery(query, Allocator.TempJob);
+            return new NativeQuery(query);
         }
-
+        
         public static NativePool<T> GetPoolNative<T>(this World world) where T : unmanaged, IComponent {
             return world.GetPool<T>().AsNative();
+        }
+
+        internal unsafe static T* AsPtr<T>(this ref Vector<T> vector) where T : unmanaged {
+            return (T*)vector.impl->data;
         }
     }
 
@@ -93,12 +106,9 @@ namespace Wargon.Ecsape {
     }
     [StructLayout(LayoutKind.Sequential)]
     public unsafe struct NativePool<T> : INativeContainer<T> where T : unmanaged, IComponent {
-
-        internal int count;
-        [NativeDisableUnsafePtrRestriction]
-        internal T* data;
-        [NativeDisableUnsafePtrRestriction]
-        internal int* entities;
+        private int count;
+        [NativeDisableUnsafePtrRestriction] private T* data;
+        [NativeDisableUnsafePtrRestriction] private int* entities;
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NativePool(IPool<T> pool, Allocator allocator) {
             fixed(T* dataPtr = pool.GetRawData())
@@ -145,14 +155,12 @@ namespace Wargon.Ecsape {
     }
     [StructLayout(LayoutKind.Sequential)]
     public unsafe struct NativeQuery {
-        [NativeDisableUnsafePtrRestriction]
-        internal int* entities;
-        [NativeDisableUnsafePtrRestriction]
-        internal int* entityMap;
-        internal int count;
+        [NativeDisableUnsafePtrRestriction] private int* entities;
+        [NativeDisableUnsafePtrRestriction] private int* entityMap;
+        private int count;
         public int Count => count;
         public bool IsEmpty => count == 0;
-        public NativeQuery(Query query, Allocator allocator) {
+        public NativeQuery(Query query) {
             entities = query.GetEntitiesPtr();
             entityMap = query.GetEntitiesMapPtr();
             count = query.count;
@@ -238,37 +246,8 @@ namespace Wargon.Ecsape {
         //         return NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<T>(ptr, managedData.Length, Allocator.TempJob);
         //     }
         // }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe NativeWrappedData<T> WrapToNative<T>(ref T[] managedData) where T : unmanaged
-        {
-            fixed (void* ptr = managedData)
-            {
-#if UNITY_EDITOR
-                var nativeData = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<T>(ptr, managedData.Length, Allocator.TempJob);
-                var sh = AtomicSafetyHandle.Create();
-                NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref nativeData, sh);
-                return new NativeWrappedData<T> {Array = nativeData, SafetyHandle = sh};
-#else
-            return new NativeWrappedData<T> { Array = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<T> (ptr, managedData.Length, Allocator.None) };
-#endif
-            }
-        }
-#if UNITY_EDITOR
-        public static void UnwrapFromNative<T>(NativeWrappedData<T> sh) where T : unmanaged
-        {
-            AtomicSafetyHandle.CheckDeallocateAndThrow(sh.SafetyHandle);
-            AtomicSafetyHandle.Release(sh.SafetyHandle);
-        }
-#endif
     }
 
-    public struct NativeWrappedData<TT> where TT : unmanaged
-    {
-        [NativeDisableParallelForRestriction] public NativeArray<TT> Array;
-#if UNITY_EDITOR
-        public AtomicSafetyHandle SafetyHandle;
-#endif
-    }
     
     public readonly unsafe struct NativeString {
         private readonly char* letters;
@@ -297,6 +276,86 @@ namespace Wargon.Ecsape {
             //RuntimeHelpers.PrepareMethod(onUpdateInfo.MethodHandle);
 
             return systems;
+        }
+    }
+
+    public unsafe struct Vector<T> where T : struct {
+        internal Internal* impl;
+        internal struct Internal {
+            internal void* data;
+            internal int count;
+            internal int size;
+            
+            public Internal(int amount) {
+                long sizeInBytes = UnsafeUtility.SizeOf(typeof(T)) * amount;
+                data = UnsafeUtility.Malloc(sizeInBytes, UnsafeUtility.AlignOf<T>(), Allocator.Persistent);
+                count = 0;
+                size = amount;
+            }
+
+            public static Internal* New(int amount) {
+                var ptr = (Internal*) Marshal.AllocHGlobal(sizeof(Internal));
+                ptr->data = (void*)Marshal.AllocHGlobal(Marshal.SizeOf(typeof(T)) * amount);
+                ptr->count = 0;
+                ptr->size = amount;
+                return ptr;
+            }
+
+            public void Add(T item) {
+                ResizeIfNeed(index:count);
+                UnsafeUtility.WriteArrayElement(data, count, item);
+                count++;
+            }
+
+            public ref T Get(int index){
+                return ref UnsafeUtility.ArrayElementAsRef<T>(data, index);
+            }
+
+            public void Set(int index, T item) {
+                ResizeIfNeed(index:index);
+                UnsafeUtility.WriteArrayElement(data, index, item);
+            }
+            private void ResizeIfNeed(int index) {
+                if (size <= index - 1) {
+                    var newSize = size * 2;
+                    data = UnsafeHelp.Resize<T>(data,size, newSize);
+                }
+            }
+
+            public void Resize(int newSize) {
+                data = UnsafeHelp.Resize<T>(data,size, newSize);
+            }
+
+            public void Clear() {
+                UnsafeUtility.MemClear(data, UnsafeUtility.SizeOf(typeof(T)) * size);
+            }
+        }
+        
+        public int Length => impl->size;
+        
+        public Vector(int amount) {
+            impl = Internal.New(amount);
+        }
+
+        public void Add(T item) {
+            impl->Add(item);
+        }
+
+        public ref T Get(int index) {
+            return ref impl->Get(index);
+        }
+
+        public void Set(int index, T item) {
+            impl->Set(index, item);
+        }
+
+        public void Resize(int newSize) {
+            impl->Resize(newSize);
+        }
+
+        public void Clear() {
+            impl->Clear();
+            Marshal.FreeHGlobal((IntPtr)impl);
         }
     }
 }

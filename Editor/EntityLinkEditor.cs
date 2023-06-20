@@ -22,8 +22,12 @@ namespace Wargon.Ecsape.Editor {
             label.text = text;
         }
         
+        
         public override VisualElement CreateInspectorGUI() {
             entityLink = target as EntityLink;
+            if (entityLink == null) return rootContainer;
+            //entityLink.Components.RemoveAll(item => ReferenceEquals(item,null));
+            
             rootContainer = new BaseVisualElement();
 
             rootContainer.AddVisualTree(Styles.Confing.EntityLinkEditorUXML);
@@ -37,6 +41,7 @@ namespace Wargon.Ecsape.Editor {
 
             if (string.IsNullOrEmpty(entityLink.WorldName))
                 entityLink.WorldName = World.DEFAULT;
+            
             worldField.SetValueWithoutNotify(entityLink.WorldName);
             worldField.RegisterValueChangedCallback(x => { entityLink.WorldName = x.newValue; });
             
@@ -45,13 +50,13 @@ namespace Wargon.Ecsape.Editor {
             optionField.SetValueWithoutNotify(ConvertOption.Stay);
             optionField.RegisterValueChangedCallback(x => { entityLink.option = (ConvertOption) x.newValue; });
 
-            
             var addBtn = entityInspector.Q<Button>("Add");
             addBtn.clickable.clicked += () => {
-                ComponentsListPopup.Show(addBtn.LocalToWorld(addBtn.layout).center, entityLink);
+                ComponentsListPopup.Show(addBtn.LocalToWorld(addBtn.layout).center, entityLink, DrawEditor);
             };
             rootContainer.Add(entityInspector);
             rootContainer.Add(componentsRoot);
+            DrawEditor();
             inited = true;
             return rootContainer;
         }
@@ -67,9 +72,21 @@ namespace Wargon.Ecsape.Editor {
         }
         
         private void OnDraw() {
-            
-            if (entityLink == null) return;
-            if (entityLink.linked) {
+            if (ReferenceEquals(entityLink, null)) return;
+            DrawRuntime();
+        }
+        
+        private void DrawEditor() {
+            SetEntityIndex("DEAD");
+            for (var index = 0; index < entityLink.Components.Count; index++) {
+                var component = entityLink.Components[index];
+                ComponentInspectors.Get(component.GetType())
+                    .DrawEditor(component, componentsRoot, entityLink, entityLink.Components);
+            }
+        }
+
+        private void DrawRuntime() {
+            if (entityLink.Linked) {
                 var e = entityLink.Entity;
                 
                 if(!e.IsNull())
@@ -83,30 +100,11 @@ namespace Wargon.Ecsape.Editor {
                 componentsCache = archetype.GetComponents(in e);
                 for (var index = 0; index < componentsCache.Length; index++) {
                     var component = componentsCache[index];
-                    if (component == null) {
-                        entityLink.Components.Remove(component);
-                        continue;
-                    }
-
                     var inspector = ComponentInspectors.Get(component.GetType());
                     inspector.DrawRunTime(component, componentsRoot, e);
                 }
-
                 
                 archetypePrevious = archetypeCurrent;
-            }
-            else {
-                SetEntityIndex("DEAD");
-                for (var index = 0; index < entityLink.Components.Count; index++) {
-                    var component = entityLink.Components[index];
-                    if (component == null) {
-                        entityLink.Components.Remove(component);
-                        continue;
-                    }
-
-                    ComponentInspectors.Get(component.GetType())
-                        .DrawEditor(component, componentsRoot, entityLink, entityLink.Components);
-                }
             }
         }
     }

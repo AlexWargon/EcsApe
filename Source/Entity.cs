@@ -8,6 +8,8 @@ namespace Wargon.Ecsape {
     public struct Entity : IEquatable<Entity> {
         public int Index;
         internal byte WorldIndex;
+
+        internal bool alive;
         //internal unsafe WorldNative* WorldNative;
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Equals(Entity other) {
@@ -107,8 +109,8 @@ namespace Wargon.Ecsape {
         /// </summary>
         /// <param name="entity"></param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void DestroyNow(in this Entity entity) {
-            World.Get(entity.WorldIndex).OnDestroyEntity(in entity);
+        public static void DestroyNow(ref this Entity entity) {
+            World.Get(entity.WorldIndex).OnDestroyEntity(ref entity);
         }
 
         public static Archetype GetArchetype(in this Entity entity) {
@@ -164,7 +166,7 @@ namespace Wargon.Ecsape {
                 labda.Invoke(result.Entity, ref result.Entity.Get<TComponent>());
             }
         }
-        public ref struct IfHasComponentResult<TComponent> where TComponent : struct,IComponent {
+        public ref struct IfHasComponentResult<TComponent> where TComponent : struct, IComponent {
             public bool value;
             public Entity Entity;
         }
@@ -188,7 +190,6 @@ namespace Wargon.Ecsape {
             if (GetArchetype(in entity).HasComponent(index)) return ref GetPool<TComponent>().Get(entity.Index);
             var pool = GetPool<TComponent>();
             pool.Add(entity.Index);
-            //MigrateEntity(entity.Index, ref GetArchetypeId(entity.Index), index, true);
             ChangeEntityArchetype(in entity.Index, in index, true);
             ChangeComponentsAmount(in entity, +1);
             return ref pool.Get(entity.Index);
@@ -200,7 +201,6 @@ namespace Wargon.Ecsape {
             if (GetArchetype(in entity).HasComponent(index)) return;
             ref var pool = ref GetPoolByIndex(index);
             pool.Add(entity.Index);
-            //MigrateEntity(entity.Index, ref GetArchetypeId(entity.Index), index, true);
             ChangeEntityArchetype(in entity.Index, in index, true);
             ChangeComponentsAmount(in entity, +1);
         }
@@ -212,7 +212,6 @@ namespace Wargon.Ecsape {
             var pool = GetPool<TComponent>();
             pool.Add(in component, entity.Index);
             ChangeComponentsAmount(in entity, +1);
-            //MigrateEntity(entity.Index, ref GetArchetypeId(entity.Index), index, true);
             ChangeEntityArchetype(in entity.Index, in index, true);
         }
         
@@ -222,7 +221,6 @@ namespace Wargon.Ecsape {
             if (GetArchetype(in entity).HasComponent(index)) return;
             GetPoolByIndex(index).AddBoxed(component, entity.Index);
             ChangeComponentsAmount(in entity, +1);
-            //MigrateEntity(entity.Index, ref GetArchetypeId(entity.Index), index, true);
             ChangeEntityArchetype(in entity.Index, in index, true);
         }
         
@@ -231,7 +229,6 @@ namespace Wargon.Ecsape {
             if (GetArchetype(in entity).HasComponent(typeID)) return;
             GetPoolByIndex(typeID).AddPtr(component, entity.Index);
             ChangeComponentsAmount(in entity, +1);
-            //MigrateEntity(entity.Index, ref GetArchetypeId(entity.Index), typeID, true);
             ChangeEntityArchetype(in entity.Index, in typeID, true);
         }
         
@@ -240,7 +237,6 @@ namespace Wargon.Ecsape {
             if (GetArchetype(in entity).HasComponent(typeID)) return;
             GetPoolByIndex(typeID).Add(entity.Index);
             ChangeComponentsAmount(in entity, +1);
-            //MigrateEntity(entity.Index, ref GetArchetypeId(entity.Index), typeID, true);
             ChangeEntityArchetype(in entity.Index, in typeID, true);
         }
         
@@ -260,7 +256,6 @@ namespace Wargon.Ecsape {
             ref var componentsAmount = ref ChangeComponentsAmount(in entity, -1);
             if (componentsAmount > 0)
                 ChangeEntityArchetype(in entity.Index, in index, false);
-                //MigrateEntity(entity.Index, ref GetArchetypeId(entity.Index), index, false);
             else
                 OnDestroyEntity(in entity, ref componentsAmount);
         }
@@ -272,7 +267,6 @@ namespace Wargon.Ecsape {
             GetPoolByIndex(index).Remove(entity.Index);
             ref var componentsAmount = ref ChangeComponentsAmount(in entity, -1);
             if (componentsAmount > 0)
-                //MigrateEntity(entity.Index, ref GetArchetypeId(entity.Index), index, false);
                 ChangeEntityArchetype(in entity.Index, in index, false);
             else
                 OnDestroyEntity(in entity, ref componentsAmount);
@@ -284,7 +278,6 @@ namespace Wargon.Ecsape {
             GetPoolByIndex(type).Remove(entity.Index);
             ref var componentsAmount = ref ChangeComponentsAmount(in entity, -1);
             if (componentsAmount > 0)
-                //MigrateEntity(entity.Index, ref GetArchetypeId(entity.Index), type, false);
                 ChangeEntityArchetype(in entity.Index, in type, false);
             else
                 OnDestroyEntity(in entity, ref componentsAmount);

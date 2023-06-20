@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using UnityEngine.UI;
 using Wargon.Ecsape.Pools;
 
 namespace Wargon.Ecsape {
@@ -28,6 +31,7 @@ namespace Wargon.Ecsape {
         public static readonly bool IsDisposable;
         public static readonly int SizeInBytes;
         public static readonly bool IsOnCreate;
+        public static readonly bool IsUnmanaged;
         static Component() {
             Type = typeof(T);
             Index = Component.GetIndex(Type);
@@ -39,13 +43,14 @@ namespace Wargon.Ecsape {
             IsDisposable = componentType.IsDisposable;
             SizeInBytes = componentType.SizeInBytes;
             IsOnCreate = componentType.IsOnCreate;
+            IsUnmanaged = componentType.IsUnmanaged;
             if (IsClearOnEnfOfFrame) {
                 DefaultClearSystems.Add<ClearEventsSystem<T>>();
             }
         }
 
         public static ComponentType AsComponentType() {
-            return new ComponentType(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsDisposable, Type.Name, SizeInBytes, IsOnCreate);
+            return new ComponentType(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsDisposable, Type.Name, SizeInBytes, IsOnCreate, IsUnmanaged);
         }
     }
 
@@ -60,7 +65,8 @@ namespace Wargon.Ecsape {
         public readonly NativeString Name;
         public readonly int SizeInBytes;
         public readonly bool IsOnCreate;
-        public ComponentType(int index, bool isSingletone, bool isTag, bool isEvent, bool clearOnEnfOfFrame, bool disposable, string name, int size, bool isOnCreate) {
+        public readonly bool IsUnmanaged;
+        public ComponentType(int index, bool isSingletone, bool isTag, bool isEvent, bool clearOnEnfOfFrame, bool disposable, string name, int size, bool isOnCreate, bool isUnmanaged) {
             Index = index;
             IsSingletone = isSingletone;
             IsTag = isTag;
@@ -70,6 +76,7 @@ namespace Wargon.Ecsape {
             Name = new NativeString(name);
             SizeInBytes = size;
             IsOnCreate = isOnCreate;
+            IsUnmanaged = isUnmanaged;
         }
 
         public bool Equals(ComponentType other) {
@@ -106,7 +113,8 @@ namespace Wargon.Ecsape {
                 typeof(IDisposable).IsAssignableFrom(type), 
                 type.Name,
                 Marshal.SizeOf(type),
-                typeof(IOnCreate).IsAssignableFrom(type)
+                typeof(IOnCreate).IsAssignableFrom(type),
+                type.IsUnManaged()
                 );
             AddInfo(ref componentType, index);
             count++;
@@ -124,12 +132,30 @@ namespace Wargon.Ecsape {
         public static ref ComponentType GetComponentType(int index) {
             return ref componentTypes[index];
         }
+        
+        
     }
 
     public static class ComponentExtensions {
         internal static Type GetTypeFromIndex(this int index) {
             return Component.GetTypeOfComponent(index);
         }
+
+        public static bool IsUnManaged(this Type t)
+        {
+            var result = false;
+
+            if (t.IsPrimitive || t.IsPointer || t.IsEnum)
+                result = true;
+            else if (t.IsGenericType || !t.IsValueType)
+                result = false;
+            else
+                result = t.GetFields(BindingFlags.Public | 
+                                     BindingFlags.NonPublic | BindingFlags.Instance)
+                    .All(x => x.FieldType.IsUnManaged());
+            return result;
+        }
+        
     }
     public static class Generic {
         public static object New(Type genericType, Type elementsType, params object[] parameters) {
@@ -151,16 +177,21 @@ namespace Wargon.Ecsape {
             
             static IPool New(int size, int typeIndex) {
 
-                var info = Component.GetComponentType(typeIndex);
+                ref var info = ref Component.GetComponentType(typeIndex);
                 var componentType = Component.GetTypeOfComponent(typeIndex);
-                var poolType = info.IsTag || info.IsSingletone || info.IsEvent ? typeof(TagPool<>)
-                    : info.IsDisposable ? typeof(DisposablePool<>) : info.IsOnCreate ? typeof(OnCreatePool<>) : typeof(Pool<>);
+                var isTagPool = info.IsTag || info.IsSingletone || info.IsEvent;
+                var isDisposablePool = info.IsDisposable;
+                var isOnCreatePool = info.IsOnCreate;
+                //var isUnmanagedPool = !isTagPool && !isDisposablePool && !isOnCreatePool && info.IsUnmanaged;
+                var poolType = isTagPool ? typeof(TagPool<>)
+                    : isDisposablePool ? typeof(DisposablePool<>) : isOnCreatePool ? typeof(OnCreatePool<>)  : typeof(Pool<>);
                 var pool = (IPool) Generic.New(poolType, componentType, size);
                 return pool;
             }
 
             void Resize(int newSize);
             object GetRaw(int index);
+            void Clear();
         }
     }
 
@@ -188,6 +219,11 @@ namespace Wargon.Ecsape {
             count = 1;
             self = this;
         }
+
+        void IPool.Clear() {
+            
+        }
+        
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T Get(int entity) {
             return ref data;
@@ -268,6 +304,12 @@ namespace Wargon.Ecsape {
             count = 1;
             self = this;
         }
+        
+        void IPool.Clear() {
+            Array.Clear(data, 0, data.Length);
+            Array.Clear(entities, 0, entities.Length);
+        }
+        
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T Get(int entity) {
             return ref data[entities[entity]];
@@ -350,13 +392,111 @@ namespace Wargon.Ecsape {
             return self;
         }
     }
+    
+    internal class UnmanagedPool<T> : IPool<T> where T : struct, IComponent {
+        private readonly IPool self;
+        private int count;
+        private Vector<T> data;
+        private Vector<int> entities;
+        public int Capacity => data.Length;
+    
+        public int Count => count - 1;
+        public UnmanagedPool(int size) {
+            data = new Vector<T>(size);
+            entities = new Vector<int>(size);
+            Info = Component<T>.AsComponentType();
+            count = 1;
+            self = this;
+        }
+        
+        void IPool.Clear() {
+            data.Clear();
+            entities.Clear();
+        }
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ref T Get(int entity) {
+            return ref data.Get(entities.Get(entity));
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ref T Get(ref Entity entity) {
+            return ref data.Get(entities.Get(entity.Index));
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Set(in T component, int entity) {
+            data.Set(entities.Get(entity), component);
+        }
+        public void SetBoxed(object component, int entity) {
+            data.Set(entities.Get(entity), (T)component);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Add(int entity) {
+            entities.Set(entity, count);
+            data.Set(count, default);
+            count++;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Add(in T component, int entity) {
+            entities.Set(entity, count);
+            data.Set(count, component);
+            count++;
+        }
+    
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void AddBoxed(object component, int entity) {
+            entities.Set(entity, count);
+            data.Set(count, (T)component);
+            count++;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public unsafe void AddPtr(void* component, int entity) {
+            entities.Set(entity, count);
+            data.Set(count, Marshal.PtrToStructure<T>((IntPtr)component));
+            count++;
+            
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Remove(int entity) {
+            entities.Set(entity, 0);
+            count--;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        bool IPool.Has(int entity) {
+            return entities.Get(entity) > 0;
+        }
+    
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        void IPool.Resize(int newSize) {
+            entities.Resize(newSize);
+        }
+    
+        public ComponentType Info { get; }
+    
+        object IPool.GetRaw(int index) {
+            return Get(index);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public T[] GetRawData() {
+            return null;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int[] GetRawEntities() {
+            return null;
+        }
+    
+        public IPool AsIPool() {
+            return self;
+        }
+    }
+    
+    
     internal class Pool<T> : IPool<T> where T : struct, IComponent {
         private readonly IPool self;
         private int count;
         private T[] data;
         private int[] entities;
         public int Capacity => data.Length;
-
+    
         public int Count => count - 1;
         public Pool(int size) {
             data = new T[size];
@@ -394,7 +534,7 @@ namespace Wargon.Ecsape {
             data[count] = component;
             count++;
         }
-
+    
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void AddBoxed(object component, int entity) {
             if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
@@ -418,17 +558,23 @@ namespace Wargon.Ecsape {
         bool IPool.Has(int entity) {
             return entities[entity] > 0;
         }
-
+    
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         void IPool.Resize(int newSize) {
             Array.Resize(ref entities, newSize);
         }
-
+    
         public ComponentType Info { get; }
-
+    
         object IPool.GetRaw(int index) {
             return Get(index);
         }
+
+        public void Clear() {
+            Array.Clear(data, 0, data.Length);
+            Array.Clear(entities, 0, entities.Length);
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public T[] GetRawData() {
             return data;
@@ -437,7 +583,7 @@ namespace Wargon.Ecsape {
         public int[] GetRawEntities() {
             return entities;
         }
-
+    
         public IPool AsIPool() {
             return self;
         }
@@ -456,6 +602,12 @@ namespace Wargon.Ecsape {
             count = 1;
             self = this;
         }
+        
+        void IPool.Clear() {
+            Array.Clear(data, 0, data.Length);
+            Array.Clear(entities, 0, entities.Length);
+        }
+        
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T Get(int entity) {
             return ref data[entities[entity]];
@@ -579,7 +731,6 @@ namespace Wargon.Ecsape {
 
     public struct StaticTag : IComponent { }
 
-
     public interface IAspect {
         IEnumerable<Type> Link();
 
@@ -602,51 +753,17 @@ namespace Wargon.Ecsape {
         }
     }
 
-
-    public unsafe struct UnsafeDelegate<T> {
-        private delegate*<T,void>* delegates;
-        private int subbed;
-        public int Count => subbed;
-        private int capacity;
-        public void Sub(delegate*<T,void> action) {
-            UnsafeHelp.AssertSize(ref delegates, ref capacity, subbed);
-            delegates[subbed++] = action;
-        }
-
-        public UnsafeDelegate(int size) {
-            delegates = (delegate*<T,void>*) Marshal.AllocHGlobal(sizeof(delegate*<T,void>) * size);
-            subbed = 0;
-            capacity = size;
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Invoke(T param) {
-            for (var i = 0; i < subbed; i++) {
-                delegates[i](param);
-            }
-        }
-    }
-    public unsafe struct UnsafeDelegate<T1, T2> {
-        private delegate*<T1, T2,void>* delegates;
-        private int subbed;
-        private int capacity;
-        public void Sub(delegate*<T1, T2,void> action) {
-            UnsafeHelp.AssertSize(ref delegates, ref capacity, subbed);
-            delegates[subbed++] = action;
-        }
-
-        public UnsafeDelegate(int size) {
-            delegates = (delegate*<T1, T2,void>*) Marshal.AllocHGlobal(sizeof(delegate*<T1, T2,void>) * size);
-            subbed = 0;
-            capacity = size;
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Invoke(T1 param1, T2 param2) {
-            for (var i = 0; i < subbed; i++) {
-                delegates[i](param1,param2);
-            }
-        }
-    }
     public static class UnsafeHelp {
+        
+        public static unsafe void* Resize<T>(void* ptr, int oldSize, int newSize) where T : struct{
+            var oldSizeInBytes = Marshal.SizeOf(typeof(T)) * oldSize;
+            var newSizeOnBytes = Marshal.SizeOf(typeof(T)) * newSize;
+            var newPtr =  (void*)Marshal.AllocHGlobal(newSizeOnBytes);
+            Buffer.MemoryCopy(ptr, newPtr, newSizeOnBytes, oldSizeInBytes);
+            Marshal.FreeHGlobal((IntPtr)ptr);
+            return newPtr;
+        }
+        
         public static unsafe T* Resize<T>(T* ptr, int oldSize, int newSize) where T : unmanaged{
             var oldSizeInBytes = sizeof(T) * oldSize;
             var newSizeOnBytes = sizeof(T) * newSize;
@@ -686,33 +803,14 @@ namespace Wargon.Ecsape {
     }
 
     internal static class Debug {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static void Log(object massage) {
             UnityEngine.Debug.Log(massage);
         }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static void LogError(object massage) {
             UnityEngine.Debug.LogError(massage);
         }
     }
-    public sealed class SyncTransformsSystem : ISystem {
-        private Query query;
-        private IPool<Components.TransformReference> transforms;
-        private IPool<Translation> translations;
-        public void OnCreate(World world) {
-            query = world.GetQuery()
-                .With<Translation>()
-                .With<Components.TransformReference>()
-                .Without<StaticTag>();
-        }
-
-        public void OnUpdate(float deltaTime) {
-            if(query.IsEmpty) return;
-            foreach (var entity in query) {
-                ref var transform = ref transforms.Get(entity.Index);
-                ref var translation = ref translations.Get(entity.Index);
-                transform.value.localPosition = translation.position;
-                transform.value.localRotation = translation.rotation;
-                transform.value.localScale = translation.scale;
-            }
-        }
-    }
+    
 }

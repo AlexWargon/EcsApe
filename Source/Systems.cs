@@ -90,9 +90,13 @@ namespace Wargon.Ecsape {
                     var componentTypeIndex = Component.GetIndex(poolType);
                     fieldInfo.SetValue(system, world.GetPoolByIndex(componentTypeIndex));
                 }
-
+                
+                if (fieldInfo.FieldType == typeof(World)) {
+                    fieldInfo.SetValue(system, world);
+                }
+                
                 if (fieldInfo.FieldType == typeof(Query)) {
-                    var attributes = fieldInfo.GetCustomAttributes(false);
+                    var attributes = fieldInfo.GetCustomAttributes(true);
                     
                     foreach (var attribute in attributes) {
                         if (attribute is WithAttribute with) {
@@ -100,14 +104,10 @@ namespace Wargon.Ecsape {
                             fieldInfo.SetValue(system, query);
                         }
                         if (attribute is WithoutAttribute without) {
-                            var query = world.GetQuery().WithAll(without.Types);
+                            var query = world.GetQuery().WithNone(without.Types);
                             fieldInfo.SetValue(system, query);
                         }
                     }
-
-                }
-                if (fieldInfo.FieldType == typeof(World)) {
-                    fieldInfo.SetValue(system, world);
                 }
             }
         }
@@ -334,7 +334,7 @@ namespace Wargon.Ecsape {
         public void OnUpdate(float deltaTime) {
             if (query.IsEmpty) return;
             foreach (ref var entity in query) {
-                world.OnDestroyEntity(in entity);
+                world.OnDestroyEntity(ref entity);
             }
         }
     }
@@ -398,6 +398,29 @@ namespace Wargon.Ecsape {
 
         public void OnUpdate(float deltaTime) {
             cmd.Execute(_world);
+        }
+    }
+    
+    public sealed class SyncTransformsSystem : ISystem {
+        private Query query;
+        private IPool<Components.TransformReference> transforms;
+        private IPool<Translation> translations;
+        public void OnCreate(World world) {
+            query = world.GetQuery()
+                .With<Translation>()
+                .With<Components.TransformReference>()
+                .Without<StaticTag>();
+        }
+
+        public void OnUpdate(float deltaTime) {
+            if(query.IsEmpty) return;
+            foreach (var entity in query) {
+                ref var transform = ref transforms.Get(entity.Index);
+                ref var translation = ref translations.Get(entity.Index);
+                transform.value.localPosition = translation.position;
+                transform.value.localRotation = translation.rotation;
+                transform.value.localScale = translation.scale;
+            }
         }
     }
 }

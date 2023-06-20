@@ -62,6 +62,10 @@
             for (var i = 0; i < entities.Length; i++) {
                 entities[i].DestroyNow();
             }
+
+            for (int i = 0; i < poolsCount; i++) {
+                pools[i].Clear();
+            }
             Array.Clear(pools, 0, pools.Length);
             Array.Clear(entities, 0, entities.Length);
             Array.Clear(poolKeys, 0, poolKeys.Length);
@@ -141,6 +145,7 @@
                 freeEntities.RemoveLast();
                 activeEntitiesCount++;
                 entityComponentsAmounts[entity.Index] = 0;
+                entity.alive = true;
                 return entity;
             }
             if (entities.Length - 1 <= activeEntitiesCount) {
@@ -152,6 +157,7 @@
             }
             entity.Index = lastEntity;
             entity.WorldIndex = selfIndex;
+            entity.alive = true;
             //entity.WorldNative = Native;
             entities[lastEntity] = entity;
             entityComponentsAmounts[entity.Index] = 0;
@@ -165,7 +171,7 @@
             return ref entities[index];
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void OnDestroyEntity(in Entity entity) {
+        internal void OnDestroyEntity(ref Entity entity) {
             var index = entity.Index;
             ref var archetype = ref GetArchetypeId(index);
             var archetypeRef = _archetypes.GetArchetype(archetype);
@@ -176,6 +182,7 @@
             freeEntities.Add(index);
             entityComponentsAmounts[index] = -1;
             activeEntitiesCount--;
+            entity.alive = false;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void OnDestroyEntity(in Entity entity, ref sbyte componentsAmount) {
@@ -416,7 +423,7 @@
     
     public partial class World {
         public const string DEFAULT = "Default";
-        public static int ENTITIES_CACHE = 256;
+        public static int ENTITIES_CACHE = 6000;
         
         private static readonly Dictionary<string, byte> ids = new();
         private static byte defaultIndex = 255;

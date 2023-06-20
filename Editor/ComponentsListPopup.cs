@@ -12,13 +12,15 @@ namespace Wargon.Ecsape.Editor {
     {
         private EntityLink target;
         private List<string> showList = new List<string>();
+        private Action OnAddRemoveComponent;
         [MenuItem("Window/UI Toolkit/ComponentsListPopup")]
-        public static void Show(Vector2 pos, EntityLink target)
+        public static void Show(Vector2 pos, EntityLink target, Action onAddRemove)
         {
-            ComponentsListPopup wnd = GetWindow<ComponentsListPopup>();
-            wnd.SetTarget(target);
-            wnd.titleContent = new GUIContent("ComponentsListPopup");
-            wnd.position = new Rect(pos + new Vector2(500,0), new Vector2(300, 500));
+            ComponentsListPopup popup = GetWindow<ComponentsListPopup>();
+            popup.SetTarget(target);
+            popup.titleContent = new GUIContent("ComponentsListPopup");
+            popup.position = new Rect(pos + new Vector2(500,0), new Vector2(300, 500));
+            popup.OnAddRemoveComponent = onAddRemove;
         }
 
         public void SetTarget(EntityLink link) => target = link;
@@ -42,7 +44,7 @@ namespace Wargon.Ecsape.Editor {
             var listRoot = labelFromUxml.Q("List");
             
             VisualElement MakeItem() => new Label();
-            void BindItem(VisualElement e, int i) => ((Label) e).text = ComponentEditor.Names[i];
+            void BindItem(VisualElement e, int i) => ((Label) e).text = showList[i];
             listView.makeItem = MakeItem;
             listView.bindItem = BindItem;
             listView.itemsSource = ComponentEditor.Names;
@@ -51,14 +53,19 @@ namespace Wargon.Ecsape.Editor {
 
             listView.onSelectionChange += x => {
                 var add = ComponentEditor.Create((string)x.FirstOrDefault());
-                var list = target.Components;
+                
                 if (add != null) {
-                    if (target.linked) {
+                    if (target.Linked) {
                         target.Entity.AddBoxed(add);
+                        OnAddRemoveComponent?.Invoke();
                     }
-                    else {
-                        if (!list.ConstainsType(add))
+                    else 
+                    {
+                        var list = target.Components;
+                        if (!list.ConstainsType(add)) {
                             list.Add(add);
+                            OnAddRemoveComponent?.Invoke();
+                        }
                     }
                 }
                 Close();
