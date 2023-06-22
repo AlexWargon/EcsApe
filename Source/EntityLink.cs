@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Wargon.Ecsape.Components;
-using Object = UnityEngine.Object;
 
 namespace Wargon.Ecsape
 {
+    [Serializable]
     [DisallowMultipleComponent]
     public class EntityLink : MonoBehaviour, IEntityLink, ISerializationCallbackReceiver {
         public string WorldName = "Default";
@@ -19,7 +19,6 @@ namespace Wargon.Ecsape
             if(linked) return;
             entityInternal = World.GetOrCreate(WorldName).CreateEntity();
             entityInternal.Add(new GameObjectSpawnedEvent{Link = this});
-            UnityEngine.Debug.Log("START");
         }
 
         public void LinkFast(in Entity entity) {
@@ -41,7 +40,6 @@ namespace Wargon.Ecsape
         }
         public void Link(ref Entity entity) {
             if(linked) return;
-            UnityEngine.Debug.Log("LINK");
             entityInternal = entity;
             foreach (var component in Components) {
                 entityInternal.AddBoxed(component);
@@ -81,18 +79,10 @@ namespace Wargon.Ecsape
         }
 
         public void OnAfterDeserialize() {
-        }
-    }
-    public struct ViewGO : IComponent, IDisposable {
-        public GameObject GameObject;
-        public void Dispose() {
-            Object.Destroy(GameObject);
+            
         }
     }
 
-    public struct ViewLink : IComponent {
-        public EntityLink Link;
-    }
     
     public enum ConvertOption {
         Stay,
@@ -105,11 +95,11 @@ namespace Wargon.Ecsape
         void Link(ref Entity entity);
     }
 
-    internal struct GameObjectSpawnedEvent : IComponent {
+    public struct GameObjectSpawnedEvent : IComponent {
         public IEntityLink Link;
     }
     
-    internal sealed class ConvertEntitySystem : ISystem {
+    internal sealed class ConvertEntitySystem : ISystem, IClearBeforeUpdate<GameObjectSpawnedEvent> {
         private Query _gameObjects;
         private IPool<GameObjectSpawnedEvent> _pool;
         
@@ -121,7 +111,7 @@ namespace Wargon.Ecsape
             foreach (ref var entity in _gameObjects) {
                 ref var go = ref _pool.Get(ref entity);
                 go.Link.Link(ref entity);
-                entity.Remove<GameObjectSpawnedEvent>();
+                //entity.Remove<GameObjectSpawnedEvent>();
             }
         }
     }

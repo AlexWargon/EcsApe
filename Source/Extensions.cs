@@ -9,11 +9,11 @@ namespace Wargon.Ecsape {
     using Unity.Collections.LowLevel.Unsafe;
     public static class Extensions {
 
-        public static UnityEngine.Vector3 Random(float min, float max) {
+        public static Vector3 Random(float min, float max) {
             var n = UnityEngine.Random.Range(min, max);
             return new Vector3(n, n, n);
         }
-        public static UnityEngine.Quaternion RandomZ(float min, float max) {
+        public static Quaternion RandomZ(float min, float max) {
             var n = UnityEngine.Random.Range(min, max);
             return Quaternion.Euler(new Vector3(0,0,n));
         }

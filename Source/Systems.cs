@@ -404,12 +404,12 @@ namespace Wargon.Ecsape {
     public sealed class SyncTransformsSystem : ISystem {
         private Query query;
         private IPool<Components.TransformReference> transforms;
-        private IPool<Translation> translations;
+        private IPool<Components.Translation> translations;
         public void OnCreate(World world) {
             query = world.GetQuery()
-                .With<Translation>()
+                .With<Components.Translation>()
                 .With<Components.TransformReference>()
-                .Without<StaticTag>();
+                .Without<Components.StaticTag>();
         }
 
         public void OnUpdate(float deltaTime) {

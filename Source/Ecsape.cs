@@ -4,7 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using UnityEngine.UI;
+using Wargon.Ecsape.Components;
 using Wargon.Ecsape.Pools;
 
 namespace Wargon.Ecsape {
@@ -32,6 +32,7 @@ namespace Wargon.Ecsape {
         public static readonly int SizeInBytes;
         public static readonly bool IsOnCreate;
         public static readonly bool IsUnmanaged;
+        public static readonly bool HasUnityReference;
         static Component() {
             Type = typeof(T);
             Index = Component.GetIndex(Type);
@@ -44,13 +45,14 @@ namespace Wargon.Ecsape {
             SizeInBytes = componentType.SizeInBytes;
             IsOnCreate = componentType.IsOnCreate;
             IsUnmanaged = componentType.IsUnmanaged;
+            HasUnityReference = componentType.HasUnityReference;
             if (IsClearOnEnfOfFrame) {
                 DefaultClearSystems.Add<ClearEventsSystem<T>>();
             }
         }
 
         public static ComponentType AsComponentType() {
-            return new ComponentType(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsDisposable, Type.Name, SizeInBytes, IsOnCreate, IsUnmanaged);
+            return new ComponentType(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsDisposable, Type.Name, SizeInBytes, IsOnCreate, IsUnmanaged, HasUnityReference);
         }
     }
 
@@ -66,7 +68,10 @@ namespace Wargon.Ecsape {
         public readonly int SizeInBytes;
         public readonly bool IsOnCreate;
         public readonly bool IsUnmanaged;
-        public ComponentType(int index, bool isSingletone, bool isTag, bool isEvent, bool clearOnEnfOfFrame, bool disposable, string name, int size, bool isOnCreate, bool isUnmanaged) {
+        public readonly bool HasUnityReference;
+        public ComponentType(
+            int index, bool isSingletone, bool isTag, bool isEvent, bool clearOnEnfOfFrame, bool disposable, 
+            string name, int size, bool isOnCreate, bool isUnmanaged, bool hasUnityReference) {
             Index = index;
             IsSingletone = isSingletone;
             IsTag = isTag;
@@ -77,6 +82,7 @@ namespace Wargon.Ecsape {
             SizeInBytes = size;
             IsOnCreate = isOnCreate;
             IsUnmanaged = isUnmanaged;
+            HasUnityReference = hasUnityReference;
         }
 
         public bool Equals(ComponentType other) {
@@ -114,7 +120,8 @@ namespace Wargon.Ecsape {
                 type.Name,
                 Marshal.SizeOf(type),
                 typeof(IOnCreate).IsAssignableFrom(type),
-                type.IsUnManaged()
+                type.IsUnManaged(),
+                type.HasUnityReferenceFields()
                 );
             AddInfo(ref componentType, index);
             count++;
@@ -155,7 +162,17 @@ namespace Wargon.Ecsape {
                     .All(x => x.FieldType.IsUnManaged());
             return result;
         }
-        
+
+        public static bool HasUnityReferenceFields(this Type type) {
+            var fields = type.GetFields();
+            foreach (var fieldInfo in fields) {
+                if (fieldInfo.FieldType.IsSubclassOf(typeof(UnityEngine.Object))) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
     public static class Generic {
         public static object New(Type genericType, Type elementsType, params object[] parameters) {
@@ -712,24 +729,86 @@ namespace Wargon.Ecsape {
         }
     }
 
-    
 
-    [Serializable]
-    public struct Translation : IComponent {
-        /// Local
-        public UnityEngine.Vector3 position;
-        /// Local
-        public UnityEngine.Quaternion rotation;        
-        /// Local
-        public UnityEngine.Vector3 scale;
+    namespace Serializable {
+        [StructLayout(LayoutKind.Sequential)]
+        [Serializable]
+        public struct Vector2 {
+            public float x;
+            public float y;
+        
+            public Vector2(float x, float y) {
+                this.x = x;
+                this.y = y;
+            }
+        
+            public static implicit operator UnityEngine.Vector3(Vector2 rValue)
+            {
+                return new UnityEngine.Vector3(rValue.x, rValue.y, 0F);
+            }
+        
+            public static implicit operator UnityEngine.Vector2(Vector2 rValue)
+            {
+                return new UnityEngine.Vector2(rValue.x, rValue.y);
+            }
+            public static implicit operator Vector2(UnityEngine.Vector2 rValue)
+            {
+                return new Vector2(rValue.x, rValue.y);
+            }
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        [Serializable]
+        public struct Vector3 {
+            public float x;
+            public float y;
+            public float z;
 
-        public UnityEngine.Vector3 right {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => rotation * UnityEngine.Vector3.right;
+            public Vector3(float x, float y, float z) {
+                this.x = x;
+                this.y = y;
+                this.z = z;
+            }
+            public static implicit operator UnityEngine.Vector2(Vector3 rValue)
+            {
+                return new UnityEngine.Vector2(rValue.x, rValue.y);
+            }
+            public static implicit operator UnityEngine.Vector3(Vector3 rValue)
+            {
+                return new UnityEngine.Vector3(rValue.x, rValue.y, rValue.z);
+            }
+            public static implicit operator Vector3(UnityEngine.Vector3 rValue)
+            {
+                return new Vector3(rValue.x, rValue.y, rValue.z);
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        [Serializable]
+        public struct Quaternion {
+            public float x;
+            public float y;
+            public float z;
+            public float w;
+
+            public Quaternion(float rX, float rY, float rZ, float rW)
+            {
+                x = rX;
+                y = rY;
+                z = rZ;
+                w = rW;
+            }
+            
+            public static implicit operator UnityEngine.Quaternion(Quaternion rValue)
+            {
+                return new UnityEngine.Quaternion(rValue.x, rValue.y, rValue.z, rValue.w);
+            }
+            public static implicit operator Quaternion(UnityEngine.Quaternion rValue)
+            {
+                return new Quaternion(rValue.x, rValue.y, rValue.z, rValue.w);
+            }
         }
     }
 
-    public struct StaticTag : IComponent { }
 
     public interface IAspect {
         IEnumerable<Type> Link();

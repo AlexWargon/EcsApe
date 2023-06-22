@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using Wargon.Ecsape.Components;
-using Random = UnityEngine.Random;
 
 namespace Wargon.Ecsape {
     public static class ComponentEditor {
@@ -68,7 +67,6 @@ namespace Wargon.Ecsape {
         }
         
         public static object Create(Type type) {
-            
             return Activator.CreateInstance(type);
         }
     }

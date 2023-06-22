@@ -8,9 +8,7 @@ namespace Wargon.Ecsape {
     public struct Entity : IEquatable<Entity> {
         public int Index;
         internal byte WorldIndex;
-
         internal bool alive;
-        //internal unsafe WorldNative* WorldNative;
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Equals(Entity other) {
             return Index == other.Index && WorldIndex == other.WorldIndex;
@@ -85,14 +83,20 @@ namespace Wargon.Ecsape {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Has<T>(in this Entity entity) where T : struct, IComponent {
             return World.Get(entity.WorldIndex).Has<T>(in entity);
-            //return World.Get(entity.WorldIndex).GetPoolByIndex(Component<T>.Index).Has(entity.Index);
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool Has(in this Entity entity, int type) {
+            return World.Get(entity.WorldIndex).Has(in entity, type);
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static sbyte ComponentsAmount(in this Entity entity) {
             return World.Get(entity.WorldIndex).GetComponentAmount(in entity);
         }
 
+        public static object[] GetAllComponents(in this Entity entity) {
+            return World.Get(entity.WorldIndex).GetArchetype(entity).GetAllComponents(entity);
+        }
+        
         /// <summary>
         /// Destory at the end of the frame
         /// </summary>
@@ -101,7 +105,6 @@ namespace Wargon.Ecsape {
         public static void Destroy(in this Entity entity) {
             ref var world = ref World.Get(entity.WorldIndex);
             world.GetPoolByIndex(Component.DESTROY_ENTITY).Add(entity.Index);
-            //world.MigrateEntity(entity.Index, ref world.GetArchetypeId(entity.Index), Component.DESTROY_ENTITY, true);
             world.ChangeEntityArchetype(in entity.Index, Component.DESTROY_ENTITY, true);
         }
         /// <summary>
@@ -143,7 +146,6 @@ namespace Wargon.Ecsape {
             
         }
 
-
     }
 
     public static class EntityExtensions2 {
@@ -178,10 +180,6 @@ namespace Wargon.Ecsape {
         }
     }
 
-    public static class Turples {
-        private static int Count;
-    }
-    
     public partial class World {
         
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -286,6 +284,11 @@ namespace Wargon.Ecsape {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal bool Has<T>(in Entity entity) where T : struct, IComponent {
             return GetArchetype(in entity).HasComponent(Component<T>.Index);
+        }
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal bool Has(in Entity entity, int type) {
+            return GetArchetype(in entity).HasComponent(type);
         }
     }
 }

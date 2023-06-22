@@ -97,7 +97,7 @@ namespace Wargon.Ecsape.Editor {
                 var archetype = e.GetArchetype();
                 archetypeCurrent = archetype.id;
                 if (archetypeCurrent != archetypePrevious) componentsRoot.Clear();
-                componentsCache = archetype.GetComponents(in e);
+                componentsCache = archetype.GetAllComponents(in e);
                 for (var index = 0; index < componentsCache.Length; index++) {
                     var component = componentsCache[index];
                     var inspector = ComponentInspectors.Get(component.GetType());

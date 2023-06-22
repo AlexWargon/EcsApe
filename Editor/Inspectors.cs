@@ -1,15 +1,12 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
-using Rogue;
 using UnityEditor;
 using UnityEditor.UIElements;
-using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Wargon.Ecsape.Components;
 using Wargon.Ecsape.Editor;
 using Object = UnityEngine.Object;
 
@@ -537,7 +534,7 @@ namespace Wargon.Ecsape {
         private List<EntityLink> viewList;
         private IMGUIContainer IMGUIContainer;
         private Type listType;
-
+        private int Count;
         private const string ADD_BUTTON = "unity-list-view__add-button";
         private const string REMOVE_BUTTON = "unity-list-view__remove-button";
         protected override VisualElement GetField() {
@@ -549,61 +546,28 @@ namespace Wargon.Ecsape {
                 value = new List<Entity>();
             }
             items = (List<Entity>)value;
+            Count = items.Count;
             listView.itemsSource = items;
             listView.headerTitle = fieldName;
         }
 
         protected override void OnCreate() {
 
-            Func<VisualElement> makeItem = () => {
-                var fld = new ObjectField("Entity");
-                fld.label = "element";
-                fld.objectType = typeof(EntityLink);
-                return fld;
-            };
+            Func<VisualElement> makeItem = () => new EntityField(default);
 
-            void BindItems(VisualElement elements, int index) {
-                if (runtimeMode) {
-                    var entity = items[index];
-                    if (!entity.IsNull()) {
-                        if (entity.Has<ViewLink>()) {
-                            var fld = new ObjectField($"Entity {entity.Index}");
 
-                            fld.label = fieldName;
-                            fld.objectType = typeof(EntityLink);
-                            elements = fld;
-                        }
-                        else {
-                            //((Label)elements).text = $"Entity {entity.GetArchetype()}";
-                        }
-                    }
-                }
-                else {
-                    var entity = items[index];
-                    if (!entity.IsNull()) {
-                        var fld = new ObjectField($"Entity {entity.Index}");
-                        fld.label = fieldName;
-                        fld.objectType = typeof(EntityLink);
-                        elements = fld;
-                    }
-                    else {
-                        var fld = new ObjectField($"Entity");
-                        fld.label = fieldName;
-                        fld.objectType = typeof(EntityLink);
-                        elements = fld;
-                    }
-                }
-                
+            void BindItems(VisualElement element, int index) {
+                var field = (EntityField)element;
+                field.UpdateViewAsElement(items[index], index);
             }
 
             const int itemHeight = 16;
             listView = new ListView(items, itemHeight, makeItem, BindItems);
             
             listView.selectionType = SelectionType.Multiple;
-            listView.onItemsChosen += objects => Debug.Log(objects);
+            //listView.onItemsChosen += objects => Debug.Log(objects);
             //listView.onSelectionChange += objects => Debug.Log(objects);
             listView.style.flexGrow = 1.0f;
-            listView.reorderMode = ListViewReorderMode.Animated;
             listView.virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight;
             listView.showFoldoutHeader = true;
             listView.headerTitle = "MyList";
@@ -621,10 +585,10 @@ namespace Wargon.Ecsape {
             });
             listView.Q<Button>(REMOVE_BUTTON).clickable = new Clickable(() => {
                 if(items.Count  == 0) return;
-                items.Remove(items.Last());
+                items.RemoveLast();
                 listView.Rebuild();
             });
-            listView.RegisterCallback<UnityEngine.UIElements.DragPerformEvent>(x => {
+            listView.RegisterCallback<DragPerformEvent>(x => {
                 if (Selection.activeObject is EntityLink entityLink) {
                     items.Add(entityLink.Entity);
                     listView.Rebuild();
@@ -641,6 +605,88 @@ namespace Wargon.Ecsape {
         {
             var label = (Label)item;
             label.text = items[index].Index.ToString();
+        }
+
+    }
+
+    public class EntityField : VisualElement {
+        public Entity value;
+        private IntegerField _integerField;
+        private ObjectField _objectField;
+        public EntityField(Entity entity) {
+            value = entity;
+            _integerField = new IntegerField($"{value.Index}") {
+                isReadOnly = true,
+                focusable = false
+            };
+            _objectField = new ObjectField($"{value.Index}") {
+                objectType = typeof(EntityLink)
+            };
+        }
+
+        public void UpdateView(Entity entity) {
+            value = entity;
+            if (!value.IsNull()) {
+                if (value.Has<ViewLink>()) {
+                    var link = value.Get<ViewLink>().Link;
+                    if (!Contains(_objectField)) {
+                        if(Contains(_integerField))
+                            Remove(_integerField);
+                        _objectField.value = link;
+                        Add(_objectField);
+                    }
+                }
+                else {
+                    if (!Contains(_integerField)) {
+                        if(Contains(_objectField))
+                            Remove(_objectField);
+                        _integerField.name = $"{value.Index}";
+                        Add(_integerField);
+                    }
+                }
+            }
+            else {
+                if (!Contains(_integerField)) {
+                    if(Contains(_objectField))
+                        Remove(_objectField);
+                    _integerField.name = $"{value.Index}";
+                    Add(_integerField);
+                }
+            }
+        }
+
+        private static string GetLabel(int index) {
+            return $"element [{index}]";
+        }
+        public void UpdateViewAsElement(Entity entity, int index) {
+            value = entity;
+            if (!value.IsNull()) {
+                if (value.Has<ViewLink>()) {
+                    var link = value.Get<ViewLink>().Link;
+                    if (Contains(_objectField)) return;
+                    if(Contains(_integerField))
+                        Remove(_integerField);
+                    _objectField.value = link;
+                    _objectField.label = GetLabel(index);
+                    Add(_objectField);
+                }
+                else {
+                    if (Contains(_integerField)) return;
+                    if(Contains(_objectField))
+                        Remove(_objectField);
+                    _integerField.label = GetLabel(index);
+                    _integerField.value = value.Index;
+                    Add(_integerField);
+                }
+            }
+            else {
+                if (Contains(_integerField)) return;
+                if(Contains(_objectField))
+                    Remove(_objectField);
+                _integerField.label = GetLabel(index);
+                _integerField.value = value.Index;
+                Add(_integerField);
+            }
         }
     }
     

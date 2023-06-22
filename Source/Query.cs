@@ -2,7 +2,6 @@
 namespace Wargon.Ecsape {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
     using System.Runtime.CompilerServices;
     using System.Runtime.InteropServices;
 
@@ -589,23 +588,14 @@ namespace Wargon.Ecsape {
             return entities[index];
         }
 
-        public override string ToString() {
-            var toString = $"Query({Index}).With<";
-
-            for (var i = 0; i < with.Count; i++) toString += $"{Component.GetTypeOfComponent(with.Types[i]).Name} ,";
-            toString = toString.Remove(toString.Length - 1);
-            toString += ">";
-
-            if (without.Count > 0) {
-                toString += ".Without<";
-                for (var i = 0; i < without.Count; i++)
-                    toString += $"{Component.GetTypeOfComponent(without.Types[i]).Name} ,";
-                toString = toString.Remove(toString.Length - 1);
-                toString += ">";
+        public Entity[] GetEntities() {
+            var entities = new Entity[count];
+            for (var i = 0; i < entities.Length; i++) {
+                entities[i] = GetEntity(i);
             }
-
-            return toString;
+            return entities;
         }
+        
         internal struct EntityToUpdate {
             public int entity;
             public bool add;

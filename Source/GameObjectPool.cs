@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Pool;
+using Wargon.Ecsape.Components;
 using Object = UnityEngine.Object;
 
 namespace Wargon.Ecsape {

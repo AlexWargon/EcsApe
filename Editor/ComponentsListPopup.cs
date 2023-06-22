@@ -52,18 +52,18 @@ namespace Wargon.Ecsape.Editor {
             listView.selectionType = SelectionType.Multiple;
 
             listView.onSelectionChange += x => {
-                var add = ComponentEditor.Create((string)x.FirstOrDefault());
+                var componentToAddInstance = ComponentEditor.Create((string)x.FirstOrDefault());
                 
-                if (add != null) {
+                if (componentToAddInstance != null) {
                     if (target.Linked) {
-                        target.Entity.AddBoxed(add);
+                        target.Entity.AddBoxed(componentToAddInstance);
                         OnAddRemoveComponent?.Invoke();
                     }
                     else 
                     {
                         var list = target.Components;
-                        if (!list.ConstainsType(add)) {
-                            list.Add(add);
+                        if (!list.ConstainsType(componentToAddInstance)) {
+                            list.Add(componentToAddInstance);
                             OnAddRemoveComponent?.Invoke();
                         }
                     }

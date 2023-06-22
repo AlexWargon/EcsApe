@@ -5,8 +5,7 @@ using System.Reflection;
 namespace Wargon.Ecsape {
     public class DependencyContainer : IDependencyContainer {
         private readonly Dictionary<Type, IDependencyContext> constexts;
-
-        internal DependencyContainer() {
+        public DependencyContainer() {
             constexts = new Dictionary<Type, IDependencyContext>();
             Register<IDependencyContainer>().From(this);
         }
@@ -37,14 +36,24 @@ namespace Wargon.Ecsape {
                 }
             }
 
-            // var contructMethod = type.GetMethod("Contruct");
+            var contructMethod = type.GetMethod(IDependencyContainer.CONSTRUCTOR);
+            if (contructMethod != null) {
+                contructMethod.Invoke(instance, null);
+                Debug.Log($"{type.Name} Consruct");
+            }
             // var parameters = contructMethod.GetParameters();
-            // var list = new List<object>();
-            // foreach (var parameterInfo in parameters) {
-            //     list.Add(constexts[type].GetInstance());
+            // if (parameters.Length > 0) {
+            //     var list = new List<object>();
+            //     foreach (var parameterInfo in parameters) {
+            //         if (constexts.TryGetValue(parameterInfo.ParameterType, out var paramContext)) {
+            //             list.Add(paramContext.GetInstance());
+            //         }
+            //     }
+            //     contructMethod.Invoke(instance, list.ToArray());
             // }
-            //
-            // contructMethod.Invoke(instance, list.ToArray());
+            // else {
+            //     contructMethod.Invoke(instance, null);
+            // }
         }
 
         public T Get<T>() where T : class {
@@ -63,12 +72,13 @@ namespace Wargon.Ecsape {
         IDependencyContext Register<T>() where T : class;
         IDependencyContext Register<T>(T item) where T : class;
         T Get<T>() where T : class;
+        public const string CONSTRUCTOR = "Construct";
     }
-
+    
     public class DependencyContext : IDependencyContext {
         private object instance;
         private IDependencyContainer container;
-
+        private object[] ContructorParams;
         internal DependencyContext(IDependencyContainer container) {
             this.container = container;
 

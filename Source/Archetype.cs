@@ -191,16 +191,39 @@ namespace Wargon.Ecsape {
             AddEntity(e.Index);
             return e;
         }
-
-        public object[] GetComponents(in Entity entity) {
+        /// <param name="entity">Target entity</param>
+        /// <returns>Array of all boxed components</returns>
+        public object[] GetAllComponents(in Entity entity) {
             var components = new object[hashMask.Count];
             for (var i = 0; i < components.Length; i++) {
                 components[i] = world.GetPoolByIndex(maskArray.Types[i]).GetRaw(entity.Index);
             }
-
             return components;
         }
 
+        /// <param name="entity">Target entity</param>
+        /// <returns>Array of boxed components, that haven't fields with unity objects or don't have fields at all (Tags)</returns>
+        public object[] GetPureComponents(in Entity entity) {
+            var components = new List<object>();
+            for (var i = 0; i < hashMask.Count; i++) {
+                var pool = world.GetPoolByIndex(maskArray.Types[i]);
+                if (!pool.Info.HasUnityReference && !pool.Info.IsTag) {
+                    components.Add(pool.GetRaw(entity.Index));
+                }
+            }
+            return components.ToArray();
+        }
+
+        public object[] GetUnityReferenceComponents(in Entity entity) {
+            var components = new List<object>();
+            for (var i = 0; i < hashMask.Count; i++) {
+                var pool = world.GetPoolByIndex(maskArray.Types[i]);
+                if (pool.Info.HasUnityReference) {
+                    components.Add(pool.GetRaw(entity.Index));
+                }
+            }
+            return components.ToArray();
+        }
         public Span<ComponentType> GetComponentTypes() {
             Span<ComponentType> span = new ComponentType[maskArray.Count];
             for (var i = 0; i < maskArray.Count; i++) {
