@@ -85,8 +85,7 @@ namespace Wargon.Ecsape {
         }
 
         private void CreateEdges(in int component) {
-            var maskAdd = new HashSet<int>(hashMask);
-            maskAdd.Add(component);
+            var maskAdd = new HashSet<int>(hashMask) { component };
             var maskRemove = new HashSet<int>(hashMask);
             maskRemove.Remove(component);
 
@@ -127,34 +126,34 @@ namespace Wargon.Ecsape {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void FilterQuery(Query query) {
-            if (QueryMatchWithArchetype(query)) {
+            if (IsQueryMatchWithArchetype(query)) {
                 queries.Add(query);
                 _queriesCount++;
             }
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private bool QueryMatchWithArchetype(Query query) {
-            for (var q = 0; q < query.without.Count; q++) {
-                var type = query.without.Types[q];
+        private bool IsQueryMatchWithArchetype(Query query) {
+            for (var index = 0; index < query.without.Count; index++) {
+                var type = query.without.Types[index];
                 if (hashMask.Contains(type)) return false;
             }
 
             var checks = 0;
-            for (var i = 0; i < query.with.Count; i++) {
-                if (HasComponent(query.with.Types[i])) {
+            for (var index = 0; index < query.with.Count; index++) {
+                if (HasComponent(query.with.Types[index])) {
                     checks++;
                     if (checks == query.with.Count) {
-                        queries.Add(query);
-                        _queriesCount++;
+                        // queries.Add(query);
+                        // _queriesCount++;
                         return true;
                     }
                 }
             }
             
-            for (int i = 0; i < query.any.Count; i++) {
-                if(HasComponent(query.any.Types[i]))
-                    return true;
-            }
+            // for (int i = 0; i < query.any.Count; i++) {
+            //     if(HasComponent(query.any.Types[i]))
+            //         return true;
+            // }
 
             return false;
         }
@@ -186,7 +185,6 @@ namespace Wargon.Ecsape {
                 world.GetPoolByIndex(maskArray.Types[i]).Add(e.Index);
                 componentsAmount++;
             }
-
             world.GetArchetypeId(e.Index) = id;
             AddEntity(e.Index);
             return e;

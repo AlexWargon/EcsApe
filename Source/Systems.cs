@@ -12,26 +12,26 @@ namespace Wargon.Ecsape {
         private ISystem[] lateUpdates;
         private ISystem[] fixedUpdates;
         private int updatesCount;
+        private int fixedUpdatesCounts;
         private IDependencyContainer dependencyContainer;
         private bool hasDependencyContainer;
         public Systems(World world) {
             this.world = world;
             updates = new ISystem[32];
+            fixedUpdates = new ISystem[32];
             updatesCount = 0;
+            fixedUpdatesCounts = 0;
             groups = new List<Group>();
             defaultSystems = new DefaultSystems();
-
-            defaultSystems.Init();
-            foreach (var system in defaultSystems.start)
-                AddSystem(system);
+            
         }
 
         public Systems Init() {
-
+            foreach (var system in defaultSystems.start)
+                AddSystem(system);
             foreach (var group in groups)
                 for (var i = 0; i < group.count; i++) {
                     var s = group.systems[i];
-                    IfIsEventSystemAddClearSystem(s);
                     AddSystem(s);
                 }
 
@@ -42,8 +42,7 @@ namespace Wargon.Ecsape {
             foreach (var system in DefaultClearSystems.GetSystems()) {
                 AddSystem(system);
             }
-
-            //InitDependencies();
+            
             return this;
         }
         
@@ -52,28 +51,33 @@ namespace Wargon.Ecsape {
             return system.GetType().GetInterface(nameof(IEventSystem)) != null;
         }
 
-        private void IfIsEventSystemAddClearSystem<T>(T eventSystem) where T: ISystem {
+        private void IsEventSystemAddClearSystem<T>(T eventSystem) where T: ISystem {
             if (IsEventSystem(eventSystem)) {
-                var type = GetGenericType(eventSystem.GetType(), typeof(IClearBeforeUpdate<>));
-                AddSystem(CreateClearEventSystem(type));
+                var types = GetGenericType(eventSystem.GetType(), typeof(IClearBeforeUpdate<>));
+                foreach (var type in types) {
+                    var system = CreateClearEventSystem(type);
+                    AddSystem(system);
+                }
             }
         }
-                
-        private static Type GetGenericType(Type system, Type @interface) {
+
+
+        private static List<Type> GetGenericType(Type system, Type @interface) {
+            var types = new List<Type>();
             foreach(var type in system.GetInterfaces()) {
                 if(type.IsGenericType && type.GetGenericTypeDefinition() == @interface) {
-                    return type.GetGenericArguments()[0];
+                    types.Add(type.GetGenericArguments()[0]);
                 }
             }
 
-            return null;
+            return types;
         }
         
         private static ISystem CreateClearEventSystem(Type eventType) {
             return (ISystem) Generic.New(typeof(ClearEventsSystem<>), eventType, null);
         }
 
-        public Systems AddInjector(IDependencyContainer container) {
+        public Systems SetInjector(IDependencyContainer container) {
             dependencyContainer = container;
             hasDependencyContainer = true;
             return this;
@@ -97,16 +101,23 @@ namespace Wargon.Ecsape {
                 
                 if (fieldInfo.FieldType == typeof(Query)) {
                     var attributes = fieldInfo.GetCustomAttributes(true);
-                    
+
+                    var query = world.GetQuery();
+                    bool hasAttribues = false;
                     foreach (var attribute in attributes) {
                         if (attribute is WithAttribute with) {
-                            var query = world.GetQuery().WithAll(with.Types);
-                            fieldInfo.SetValue(system, query);
+                            query.WithAll(with.Types);
+                            hasAttribues = true;
                         }
                         if (attribute is WithoutAttribute without) {
-                            var query = world.GetQuery().WithNone(without.Types);
-                            fieldInfo.SetValue(system, query);
+                            query.WithNone(without.Types);
+                            hasAttribues = true;
                         }
+                        
+                    }
+
+                    if (hasAttribues) {
+                        fieldInfo.SetValue(system, query);
                     }
                 }
             }
@@ -135,46 +146,64 @@ namespace Wargon.Ecsape {
             }
         }
 
-        
-
         public Systems Clear<T>() where T : struct, IComponent {
             AddSystem(new ClearEventsSystem<T>());
             return this;
         }
 
-        public Systems Add<T>() where T : class, ISystem, new() {
+        public void Add<T>() where T : class, ISystem, new() {
             var system = new T();
-            IfIsEventSystemAddClearSystem(system);
             AddSystem(system);
-            return this;
         }
 
-        public Systems Add<T>(T system) where T : class, ISystem {
-            IfIsEventSystemAddClearSystem(system);
+        public void Add<T>(T system) where T : class, ISystem {
             AddSystem(system);
-            return this;
         }
 
-        private void AddSystem(ISystem system) {
-            if (updatesCount >= updates.Length - 1) Array.Resize(ref updates, updates.Length << 1);
-            InitDependencies(system);
-            system.OnCreate(world);
-
-            updates[updatesCount] = system;
-            updatesCount++;
+        private System.Reflection.MethodInfo onCreate;
+        private void ExecuteOnCreate(ISystem system) {
+            if(system is IOnCreate) return;
+            var type = system.GetType();
             
-            if (world.bufferGetten) {
-                var cmdsystem = new EntityCommandBufferSystem();
-                cmdsystem.OnCreate(world);
-                updates[updatesCount] = cmdsystem;
-                updatesCount++;
-                world.bufferGetten = false;
+            onCreate = type.GetMethod("OnCreate");
+            if (onCreate != null) {
+                onCreate.Invoke(system, new object[] { world });
+            }
+        }
+        private void AddSystem(ISystem system) {
+            IsEventSystemAddClearSystem(system);
+            InitDependencies(system);
+            ExecuteOnCreate(system);
+            if(system is IOnCreate onCreate)
+                onCreate.OnCreate(world);
+
+            if (system is IFixedUpdate) {
+                if (fixedUpdatesCounts >= fixedUpdates.Length - 1) Array.Resize(ref fixedUpdates, fixedUpdates.Length << 1);
+                fixedUpdates[fixedUpdatesCounts++] = system;
+                if (world.bufferGetten) {
+                    var cmdsystem = new EntityCommandBufferSystem();
+                    cmdsystem.OnCreate(world);
+                    fixedUpdates[fixedUpdatesCounts++] = cmdsystem;
+                    world.bufferGetten = false;
+                }
+            }
+            else {
+                if (updatesCount >= updates.Length - 1) Array.Resize(ref updates, updates.Length << 1);
+                updates[updatesCount++] = system;
+                if (world.bufferGetten) {
+                    var cmdsystem = new EntityCommandBufferSystem();
+                    cmdsystem.OnCreate(world);
+                    updates[updatesCount++] = cmdsystem;
+                    world.bufferGetten = false;
+                }
             }
         }
 
         internal Systems AddReactive<T>() where T : class, IOnAdd, ISystem, new() {
             var t = new T();
-            t.OnCreate(world);
+            if(t is IOnCreate onCreate)
+                onCreate.OnCreate(world);
+            ExecuteOnCreate(t);
             if (updatesCount >= updates.Length - 1) Array.Resize(ref updates, updates.Length << 1);
             updates[updatesCount] = t;
             updatesCount++;
@@ -202,10 +231,14 @@ namespace Wargon.Ecsape {
         }
         
         internal void FixedUpdate(float dt) {
-            for (var i = 0; i < updatesCount; i++) {
+            for (var i = 0; i < fixedUpdatesCounts; i++) {
                 fixedUpdates[i].OnUpdate(dt);
                 world.UpdateQueries();
             }
+        }
+        
+        internal void OnUpdate(float dt, ref Unity.Jobs.JobHandle handle) {
+            handle.Complete();
         }
         
         public class Group {
@@ -245,7 +278,9 @@ namespace Wargon.Ecsape {
             }
         }
     }
-    
+    public interface IJobSystem{
+        
+    }
     public interface IEntitySystem : ISystem {
         Query Query { get; set; }
 
@@ -290,11 +325,16 @@ namespace Wargon.Ecsape {
     ///     Execute every frame
     /// </summary>
     public interface ISystem {
-        void OnCreate(World world); // ReSharper disable Unity.PerformanceAnalysis
+
         /// <param name="deltaTime"> time in ms between frames</param>
         void OnUpdate(float deltaTime); // ReSharper disable Unity.PerformanceAnalysis
     }
-
+    
+    public interface IFixedUpdate { }
+    public interface ILateUpdate { }
+    public interface IOnCreate {
+        void OnCreate(World world); // ReSharper disable Unity.PerformanceAnalysis
+    }
     public abstract class SystemBase : ISystem {
         protected Entities Entities;
         protected World World;
@@ -338,7 +378,16 @@ namespace Wargon.Ecsape {
             }
         }
     }
+    sealed class ClearViewSystem : ISystem {
+        private IPool<Components.ViewGO> gos;
+        [With(typeof(Components.ViewGO), typeof(DestroyEntity))] private Query Query;
 
+        public void OnUpdate(float dt) {
+            foreach (ref var entity in Query) {
+                UnityEngine.Object.Destroy(gos.Get(ref entity).GameObject);
+            }
+        }
+    }
     public abstract class SkipFrameSystem : ISystem {
         private int counter;
         private int skip;
@@ -374,8 +423,14 @@ namespace Wargon.Ecsape {
             enabled = false;
         }
 
-        internal void Init() {
+        internal DefaultSystems() {
+            start.Add(new ConvertEntitySystem());
+            
+            
+            end.Add(new ClearViewSystem());
             end.Add(new DestroyEntitiesSystem());
+            end.Add(new SyncTransformsSystem());
+            end.Add(new ClearEventsSystem<GameObjectSpawnedEvent>());
         }
     }
 
@@ -401,7 +456,7 @@ namespace Wargon.Ecsape {
         }
     }
     
-    public sealed class SyncTransformsSystem : ISystem {
+    public sealed class SyncTransformsSystem : ISystem, IOnCreate {
         private Query query;
         private IPool<Components.TransformReference> transforms;
         private IPool<Components.Translation> translations;
@@ -414,7 +469,8 @@ namespace Wargon.Ecsape {
 
         public void OnUpdate(float deltaTime) {
             if(query.IsEmpty) return;
-            foreach (var entity in query) {
+            for (int i = 0; i < query.count; i++) {
+                ref var entity = ref query.GetEntity(i);
                 ref var transform = ref transforms.Get(entity.Index);
                 ref var translation = ref translations.Get(entity.Index);
                 transform.value.localPosition = translation.position;

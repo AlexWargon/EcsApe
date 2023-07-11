@@ -67,7 +67,19 @@ namespace Wargon.Ecsape {
         }
         
         public static object Create(Type type) {
-            return Activator.CreateInstance(type);
+            var instance = Activator.CreateInstance(type);
+            // var fileds = instance.GetType().GetFields();
+            // foreach (var fieldInfo in fileds) {
+            //     if(fieldInfo.FieldType.IsGenericType)
+            //         if (fieldInfo.FieldType.GetGenericTypeDefinition() == typeof(ObjectReference<>)) {
+            //             var value = fieldInfo.GetValue(instance);
+            //             var method = fieldInfo.FieldType.GetMethod("Initialize");
+            //             method.Invoke(value, null);
+            //             Debug.Log(value.GetType().GetField("id").GetValue(value));
+            //             fieldInfo.SetValue(instance, value);
+            //         }
+            // }
+            return instance;
         }
     }
 }

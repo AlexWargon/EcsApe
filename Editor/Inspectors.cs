@@ -19,6 +19,8 @@ namespace Wargon.Ecsape {
             if(inited) return;
             
             Add<int>(new IntInspector());
+            Add<byte>(new ByteInspector());
+            
             Add<string>(new StringInspector());
             Add<Object>(new ObjectInspector());
             Add<float>(new FloatInspector());
@@ -33,7 +35,7 @@ namespace Wargon.Ecsape {
             Add<Entity>(new EntityInspector());
             Add<List<EntityLink>>(new ListOfEntityLinksInspector());
             Add<Enum>(new EnumInspector());
-            
+            Add<ObjectReference<Object>>(new ObjectReferenceInspector());
             foreach (var inspectorsValue in inspectors.Values) {
                 inspectorsValue.Create();
             }
@@ -47,6 +49,14 @@ namespace Wargon.Ecsape {
         public static void Clear() {
             inited = false;
         }
+
+        private static bool IsObjectReference(Type type) {
+            if (type.IsGenericType) {
+                var s = type.GetGenericTypeDefinition();
+                return s == typeof(ObjectReference<>);
+            }
+            return false;
+        }
         public static BaseInspector New(Type type) {
             //Debug.Log($"TRY CREATE INSPECTOR TYPE OF {type.Name}");
             var typeToSearch = type;
@@ -54,6 +64,9 @@ namespace Wargon.Ecsape {
                 typeToSearch = typeof(Object);
             if (typeToSearch.IsEnum)
                 typeToSearch = typeof(Enum);
+            if (IsObjectReference(typeToSearch)) {
+                typeToSearch = typeof(ObjectReference<Object>);
+            }
             if (inspectors.TryGetValue(typeToSearch, out var inspector)) {
                 var typeToCreate = inspector.GetType();
                 var newInspector = (BaseInspector)Activator.CreateInstance(typeToCreate);
@@ -114,15 +127,16 @@ namespace Wargon.Ecsape {
         protected string fieldName = "field";
         protected bool runtimeMode;
         private bool initialized;
+        protected bool blocked;
         protected Action<object> onChange;
         private VisualElement previousRoot;
-        private object target;
+        protected object targetComponent;
         protected EntityLink targetLink;
         private float updateDelayCounter;
+        protected FieldInfo FieldInfo;
         protected abstract VisualElement GetField();
-
         private void SetTarget(object component, Object targetObj) {
-            target = component;
+            targetComponent = component;
             targetLink = (EntityLink)targetObj;
         }
 
@@ -141,20 +155,24 @@ namespace Wargon.Ecsape {
             if (root == previousRoot) return;
             if (initialized) return;
             AddToRoot(root);
+            FieldInfo = fieldInfo;
             SetTarget(component, link);
             this.fieldName = fieldNameParam;
             onChange = x => {
                 data = x;
-                fieldInfo.SetValue(target, data);
-                if (targetLink != null) {
-                    EditorUtility.SetDirty(targetLink);
-                }
+                EditorUtility.SetDirty(targetLink);
+                
                 if (runtimeMode)
-                    TargetEntity.SetBoxed(target);
+                    TargetEntity.SetBoxed(targetComponent);
+                else
+                    FieldInfo.SetValue(targetComponent, data);
+
+                blocked = false;
             };
             if (data != null) {
-                if(runTime)
+                if (runTime) {
                     OnDraw(data, runTime, fieldInfo.FieldType);
+                }
             }
             initialized = true;
         }
@@ -168,11 +186,6 @@ namespace Wargon.Ecsape {
                 onUpdate?.Invoke();
                 ticksCounter = 0;
             }
-        }
-        static async ValueTask SetDirtyAsync(Object obj) {
-            await Task.Delay(200);
-            EditorUtility.SetDirty(obj);
-            //Debug.Log(200);
         }
         protected abstract void OnDraw(object value, bool runTime, Type targetType);
 
@@ -196,7 +209,9 @@ namespace Wargon.Ecsape {
 
         protected override void OnDraw(object value, bool runTime, Type targetType) {
             field.label = fieldName;
-            field.SetValueWithoutNotify((int) value);
+            var temp = (int)value;
+            if(field.value !=temp)
+                field.SetValueWithoutNotify(temp);
         }
 
         protected override void OnCreate() {
@@ -209,11 +224,29 @@ namespace Wargon.Ecsape {
             return field;
         }
     }
+    public class ByteInspector : BaseInspector {
+        private IntegerField field;
 
+        protected override void OnDraw(object value, bool runTime, Type targetType) {
+            field.label = fieldName;
+            field.SetValueWithoutNotify((byte) value);
+        }
+
+        protected override void OnCreate() {
+            field = new IntegerField(fieldName);
+            field.value = default;
+            field.RegisterValueChangedCallback(x => { onChange?.Invoke((byte)x.newValue); });
+        }
+
+        protected override VisualElement GetField() {
+            return field;
+        }
+    }
     public class FloatInspector : BaseInspector {
         private FloatField field;
 
         protected override void OnDraw(object value, bool runTime, Type targetType) {
+            if(blocked) return;
             field.label = fieldName;
             field.SetValueWithoutNotify((float) value);
         }
@@ -413,7 +446,7 @@ namespace Wargon.Ecsape {
     }
     public class EntityInspector : BaseInspector {
         private Label pureEntityField;
-        private ObjectField hybridEntityField;
+        private EntityField hybridEntityField;
         private Entity fieldValue;
         protected override VisualElement GetField() {
             if (!fieldValue.IsNull()) {
@@ -424,25 +457,12 @@ namespace Wargon.Ecsape {
 
         protected override void OnDraw(object value, bool runTime, Type targetType) {
             fieldValue = (Entity)value;
-            if(fieldValue.IsNull()) return;
-            if (fieldValue.Has<ViewLink>()) {
-                hybridEntityField.label = fieldName;
-                hybridEntityField.SetValueWithoutNotify(fieldValue.Get<ViewLink>().Link);
-            }
-            else {
-                var s = fieldValue.IsNull() ? "DEAD" : fieldValue.Index.ToString();
-                pureEntityField.text = $"{fieldName} {s}";
-            }
+            //if(fieldValue.IsNull()) return;
+            hybridEntityField.UpdateView(fieldValue);
         }
 
         protected override void OnCreate() {
-            pureEntityField = new Label("entity X");
-            hybridEntityField = new ObjectField("entity X");
-            hybridEntityField.objectType = typeof(EntityLink);
-
-            hybridEntityField.RegisterValueChangedCallback(x => {
-                onChange?.Invoke(x.newValue);
-            });
+            hybridEntityField = new EntityField(default);
         }
     }
 
@@ -565,8 +585,6 @@ namespace Wargon.Ecsape {
             listView = new ListView(items, itemHeight, makeItem, BindItems);
             
             listView.selectionType = SelectionType.Multiple;
-            //listView.onItemsChosen += objects => Debug.Log(objects);
-            //listView.onSelectionChange += objects => Debug.Log(objects);
             listView.style.flexGrow = 1.0f;
             listView.virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight;
             listView.showFoldoutHeader = true;
@@ -706,6 +724,34 @@ namespace Wargon.Ecsape {
             field = new EnumField(fieldName);
             field.value = default;
             field.RegisterValueChangedCallback(x => { onChange?.Invoke(x.newValue); });
+        }
+    }
+
+    public class ObjectReferenceInspector : BaseInspector {
+        private ObjectField field;
+        private object cached;
+
+        protected override void OnDraw(object value, bool runTime, Type targetType) {
+            cached = value;
+            field.label = fieldName;
+            field.objectType = targetType.GenericTypeArguments[0];
+            var id = (int)targetType.GetField("id").GetValue(value);
+            field.SetValueWithoutNotify(UnityObjecstCollectionStatic.Instance.GetObject(id));
+        }
+
+        protected override void OnCreate() {
+            field = new ObjectField(fieldName);
+            field.value = null;
+            field.RegisterValueChangedCallback(x => {
+                if(x.newValue == x.previousValue) return;
+                object newValue = Generic.New(typeof(ObjectReference<>), field.objectType, x.newValue);
+                onChange?.Invoke(newValue);
+                MarkDirtyRepaint();
+            });
+        }
+
+        protected override VisualElement GetField() {
+            return field;
         }
     }
 }

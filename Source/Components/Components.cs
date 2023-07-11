@@ -20,6 +20,22 @@ namespace Wargon.Ecsape.Components {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => rotation * UnityEngine.Vector3.right;
         }
+        public UnityEngine.Vector3 forward {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => rotation * UnityEngine.Vector3.forward;
+        }
+        public UnityEngine.Vector3 back {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => rotation * UnityEngine.Vector3.back;
+        }
+        public UnityEngine.Vector3 up {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => rotation * UnityEngine.Vector3.up;
+        }
+        public UnityEngine.Vector3 down {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => rotation * UnityEngine.Vector3.down;
+        }
     }
 
     public struct StaticTag : IComponent { }
@@ -29,11 +45,8 @@ namespace Wargon.Ecsape.Components {
     }
     
     [Serializable]
-    public struct ViewGO : IComponent, IDisposable {
+    public struct ViewGO : IComponent {
         public UnityEngine.GameObject GameObject;
-        public void Dispose() {
-            UnityEngine.Object.Destroy(GameObject);
-        }
     }
     [Serializable]
     public struct ViewLink : IComponent {

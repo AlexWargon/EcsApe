@@ -51,16 +51,15 @@
             
             GetPool<DestroyEntity>();
             systems = new Systems(this);
-            systems.AddInjector(DI.GetOrCreateContainer());
-            systems.Add<ConvertEntitySystem>();
+            systems.SetInjector(DI.GetOrCreateContainer());
         }
 
         public void Init() => systems.Init();
 
-        internal void Destroy() {
+        private void Destroy() {
             
             for (var i = 0; i < entities.Length; i++) {
-                entities[i].DestroyNow();
+                OnDestroyEntity(ref entities[i]);
             }
 
             for (int i = 0; i < poolsCount; i++) {
@@ -139,25 +138,27 @@
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public unsafe Entity CreateEntity() {
 
-            Entity entity;
             if (freeEntities.Count > 0) {
-                entity = entities[freeEntities.Last()];
+                ref var e = ref entities[freeEntities.Last()];
                 freeEntities.RemoveLast();
                 activeEntitiesCount++;
-                entityComponentsAmounts[entity.Index] = 0;
-                entity.alive = true;
-                return entity;
+                entityComponentsAmounts[e.Index] = 0;
+                e.alive = true;
+                return e;
             }
-            if (entities.Length - 1 <= activeEntitiesCount) {
-                poolSize *= 2;
+            
+            if (poolSize - 1 <= activeEntitiesCount) {
+                poolSize = activeEntitiesCount * 2;
                 for (var i = 0; i < poolsCount; i++) pools[i].Resize(poolSize);
                 Array.Resize(ref entities, poolSize);
                 Array.Resize(ref entityComponentsAmounts, poolSize);
                 Array.Resize(ref archetypeIDs, poolSize);
             }
+            Entity entity;
             entity.Index = lastEntity;
             entity.WorldIndex = selfIndex;
             entity.alive = true;
+            
             //entity.WorldNative = Native;
             entities[lastEntity] = entity;
             entityComponentsAmounts[entity.Index] = 0;
@@ -173,16 +174,17 @@
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void OnDestroyEntity(ref Entity entity) {
             var index = entity.Index;
-            ref var archetype = ref GetArchetypeId(index);
-            var archetypeRef = _archetypes.GetArchetype(archetype);
+            ref var e = ref entities[index];
+            ref var archetypeId = ref GetArchetypeId(index);
+            var archetypeRef = _archetypes.GetArchetype(archetypeId);
             archetypeRef.RemoveEntity(index);
             archetypeRef.RemoveEntityFromPools(index);
             
-            archetype = 0;
+            archetypeId = 0;
             freeEntities.Add(index);
             entityComponentsAmounts[index] = -1;
             activeEntitiesCount--;
-            entity.alive = false;
+            e.alive = false;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void OnDestroyEntity(in Entity entity, ref sbyte componentsAmount) {
@@ -192,9 +194,10 @@
             archetypeRef.RemoveEntity(index);
 
             archetype = 0;
-            freeEntities.Add(index);
+            entities[entity.Index].alive = false;
             componentsAmount = -1;
             activeEntitiesCount--;
+            freeEntities.Add(index);
         }
         
         #endregion
@@ -255,11 +258,11 @@
         }
  
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void ChangeEntityArchetype(in int entity, in int componentType, bool add) {
+        internal void ChangeEntityArchetype(int entity, int componentType, bool add) {
             if(add)
-                _archetypes.GetArchetype(archetypeIDs[entity]).TransferAdd(in entity, in componentType);
+                _archetypes.GetArchetype(archetypeIDs[entity]).TransferAdd(entity, in componentType);
             else
-                _archetypes.GetArchetype(archetypeIDs[entity]).TransferRemove(in entity, in componentType);
+                _archetypes.GetArchetype(archetypeIDs[entity]).TransferRemove(entity, in componentType);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal ref int GetArchetypeId(int entity) {
@@ -423,7 +426,7 @@
     
     public partial class World {
         public const string DEFAULT = "Default";
-        public static int ENTITIES_CACHE = 6000;
+        public static int ENTITIES_CACHE = 256;
         
         private static readonly Dictionary<string, byte> ids = new();
         private static byte defaultIndex = 255;
@@ -446,7 +449,7 @@
             
             var world = new World(name);
             ids.Add(name, world.Index);
-            Debug.Log($"World {name} was not existed but created");
+            //Debug.Log($"World {name} was not existed but created");
             return world;
         }
         
@@ -456,7 +459,7 @@
                 return Get(index);
             var world = new World(DEFAULT);
             ids.Add(DEFAULT, world.Index);
-            Debug.Log($"World {DEFAULT} was not existed but created");
+            //Debug.Log($"World {DEFAULT} was not existed but created");
             return world;
         }
         internal static void Add(string name, byte index) {
@@ -544,19 +547,23 @@
         }
 
         public World AddDIContainer(IDependencyContainer container) {
-            systems.AddInjector(container);
+            systems.SetInjector(container);
             return this;
         }
-        public World Add<T>(T system) where T : class, ISystem {
-            systems.Add(system);
-            return this;
-        }
+        // public World Add<T>(T system) where T : class, ISystem {
+        //     systems.Add(system);
+        //     return this;
+        // }
         public World AddGroup(Systems.Group group) {
             systems.AddGroup(group);
             return this;
         }
         public void OnUpdate(float deltaTime) {
             systems.Update(deltaTime);
+        }
+
+        public void OnFixedUpdate(float deltaTime) {
+            systems.FixedUpdate(deltaTime);
         }
     }
 

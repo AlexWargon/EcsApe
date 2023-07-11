@@ -421,7 +421,25 @@ namespace Wargon.Ecsape {
             return query;
         }
     }
+    public class With<T1> {
+        
+    }
+    public class With<T1, T2> {
+        
+    }
+    public class With<T1, T2, T3> {
+        
+    }
 
+    public sealed class FilterAttribute : Attribute {
+        public Type[] types;
+        public FilterAttribute(Type type) {
+            if (type.IsGenericType) {
+                var atributes = type.GetGenericArguments();
+                types = atributes;
+            }
+        }
+    }
     public sealed class WithAttribute : Attribute {
         public Type[] Types;
         public WithAttribute(params Type[] types) {
@@ -478,8 +496,13 @@ namespace Wargon.Ecsape {
             get => count == 0;
         }
 
+        public int Count {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => count;
+        }
+        
         public bool Equals(Query other) {
-            return other.Index == Index;
+            return other.with.Types == with.Types && without.Types == other.without.Types;
         }
 
 

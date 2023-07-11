@@ -279,38 +279,38 @@ namespace Wargon.Ecsape {
         }
     }
 
-    public unsafe struct Vector<T> where T : struct {
+    public unsafe struct Vector<T> where T : unmanaged {
         internal Internal* impl;
         internal struct Internal {
             internal void* data;
             internal int count;
             internal int size;
-            
             public Internal(int amount) {
                 long sizeInBytes = UnsafeUtility.SizeOf(typeof(T)) * amount;
                 data = UnsafeUtility.Malloc(sizeInBytes, UnsafeUtility.AlignOf<T>(), Allocator.Persistent);
                 count = 0;
                 size = amount;
             }
-
+    
             public static Internal* New(int amount) {
-                var ptr = (Internal*) Marshal.AllocHGlobal(sizeof(Internal));
-                ptr->data = (void*)Marshal.AllocHGlobal(Marshal.SizeOf(typeof(T)) * amount);
+                
+                var ptr = (Internal*) UnsafeUtility.Malloc(sizeof(Internal),UnsafeUtility.AlignOf<Internal>(), Allocator.Persistent);
+                ptr->data = UnsafeUtility.Malloc(UnsafeUtility.SizeOf(typeof(T)) * amount, UnsafeUtility.AlignOf<T>(), Allocator.Persistent);
                 ptr->count = 0;
                 ptr->size = amount;
                 return ptr;
             }
-
+    
             public void Add(T item) {
                 ResizeIfNeed(index:count);
                 UnsafeUtility.WriteArrayElement(data, count, item);
                 count++;
             }
-
+    
             public ref T Get(int index){
                 return ref UnsafeUtility.ArrayElementAsRef<T>(data, index);
             }
-
+    
             public void Set(int index, T item) {
                 ResizeIfNeed(index:index);
                 UnsafeUtility.WriteArrayElement(data, index, item);
@@ -318,14 +318,16 @@ namespace Wargon.Ecsape {
             private void ResizeIfNeed(int index) {
                 if (size <= index - 1) {
                     var newSize = size * 2;
-                    data = UnsafeHelp.Resize<T>(data,size, newSize);
+                    data = UnsafeHelp.ResizeUnsafeUtility<T>(data,size, newSize, Allocator.Persistent);
+                    size = newSize;
                 }
             }
-
+    
             public void Resize(int newSize) {
-                data = UnsafeHelp.Resize<T>(data,size, newSize);
+                data = UnsafeHelp.ResizeUnsafeUtility<T>(data,size, newSize, Allocator.Persistent);
+                size = newSize;
             }
-
+    
             public void Clear() {
                 UnsafeUtility.MemClear(data, UnsafeUtility.SizeOf(typeof(T)) * size);
             }
@@ -336,23 +338,23 @@ namespace Wargon.Ecsape {
         public Vector(int amount) {
             impl = Internal.New(amount);
         }
-
+    
         public void Add(T item) {
             impl->Add(item);
         }
-
+    
         public ref T Get(int index) {
             return ref impl->Get(index);
         }
-
+    
         public void Set(int index, T item) {
             impl->Set(index, item);
         }
-
+    
         public void Resize(int newSize) {
             impl->Resize(newSize);
         }
-
+    
         public void Clear() {
             impl->Clear();
             Marshal.FreeHGlobal((IntPtr)impl);

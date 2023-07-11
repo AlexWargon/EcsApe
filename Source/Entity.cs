@@ -1,7 +1,7 @@
 ﻿using System;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Wargon.Ecsape.Components;
+using inline = System.Runtime.CompilerServices.MethodImplAttribute;
 
 namespace Wargon.Ecsape {
     [StructLayout(LayoutKind.Sequential)][Serializable]
@@ -9,132 +9,138 @@ namespace Wargon.Ecsape {
         public int Index;
         internal byte WorldIndex;
         internal bool alive;
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool Equals(Entity other) {
+        
+        [inline(256)] public bool Equals(Entity other) {
             return Index == other.Index && WorldIndex == other.WorldIndex;
         }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override int GetHashCode() {
+        
+        [inline(256)] public override int GetHashCode() {
             return Index;
+        }
+
+        public World World {
+            [inline(256)] get => World.Get(WorldIndex);
         }
     }
 
     public static class EntityExtensions {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         public static ref World GetWorld(in this Entity entity) {
             return ref World.Get(entity.WorldIndex);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         public static bool IsNull(in this Entity entity) {
             var world = entity.GetWorld();
-            return world==null || world.GetComponentAmount(in entity) < 0;
+            return world==null || world.ComponentsCountInternal(entity) <= 0;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         public static ref T Get<T>(in this Entity entity) where T : struct, IComponent {
-            return ref World.Get(entity.WorldIndex).GetComponent<T>(in entity);
+            return ref entity.World.GetComponent<T>(in entity);
         }
         
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         public static void Add<T>(in this Entity entity) where T : struct, IComponent {
-            World.Get(entity.WorldIndex).Add<T>(in entity);
+            entity.World.Add<T>(in entity);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         public static void Add<T>(in this Entity entity, in T component) where T : struct, IComponent {
-            World.Get(entity.WorldIndex).Add(in entity, in component);
+            entity.World.Add(in entity, in component);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         public static void AddBoxed(in this Entity entity, object component) {
-            World.Get(entity.WorldIndex).AddBoxed(in entity, component);
+            entity.World.AddBoxed(in entity, component);
         }
         
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         internal unsafe static void AddPtr(in this Entity entity, void* component, int typeID) {
-            World.Get(entity.WorldIndex).AddPtr(in entity, component, typeID);
+            entity.World.AddPtr(in entity, component, typeID);
         }
         
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         internal static void AddPtr(in this Entity entity, int index) {
-            World.Get(entity.WorldIndex).AddPtr(in entity, index);
+            entity.World.AddPtr(in entity, index);
         }
-        
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
+        public static void Set<T>(in this Entity entity, in T component) where T : struct, IComponent {
+            entity.World.Set(in entity, component);
+        }
+        [inline(256)]
         public static void SetBoxed(in this Entity entity, object component) {
-            World.Get(entity.WorldIndex).SetBoxed(in entity, component);
+            entity.World.SetBoxed(in entity, component);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         public static void Remove<T>(in this Entity entity) where T : struct, IComponent {
-            World.Get(entity.WorldIndex).Remove<T>(in entity);
+            entity.World.Remove<T>(in entity);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         public static void Remove(in this Entity entity, Type type) {
-            World.Get(entity.WorldIndex).Remove(in entity, type);
+            entity.World.Remove(in entity, type);
         }
         
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         public static void Remove(in this Entity entity, int type) {
-            World.Get(entity.WorldIndex).Remove(in entity, type);
+            entity.World.Remove(in entity, type);
         }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         public static bool Has<T>(in this Entity entity) where T : struct, IComponent {
-            return World.Get(entity.WorldIndex).Has<T>(in entity);
+            return entity.World.Has<T>(in entity);
         }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         public static bool Has(in this Entity entity, int type) {
-            return World.Get(entity.WorldIndex).Has(in entity, type);
+            return entity.World.Has(in entity, type);
         }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         public static sbyte ComponentsAmount(in this Entity entity) {
-            return World.Get(entity.WorldIndex).GetComponentAmount(in entity);
+            return entity.World.GetComponentAmount(in entity);
         }
-
+        [inline(256)]
         public static object[] GetAllComponents(in this Entity entity) {
-            return World.Get(entity.WorldIndex).GetArchetype(entity).GetAllComponents(entity);
+            return entity.World.GetArchetype(entity).GetAllComponents(entity);
         }
         
         /// <summary>
         /// Destory at the end of the frame
         /// </summary>
         /// <param name="entity"></param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         public static void Destroy(in this Entity entity) {
-            ref var world = ref World.Get(entity.WorldIndex);
+            var world = entity.World;
             world.GetPoolByIndex(Component.DESTROY_ENTITY).Add(entity.Index);
-            world.ChangeEntityArchetype(in entity.Index, Component.DESTROY_ENTITY, true);
+            world.ChangeEntityArchetype(entity.Index, Component.DESTROY_ENTITY, true);
         }
         /// <summary>
         /// Destroy right now (not recomened)
         /// </summary>
         /// <param name="entity"></param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         public static void DestroyNow(ref this Entity entity) {
-            World.Get(entity.WorldIndex).OnDestroyEntity(ref entity);
+            entity.World.OnDestroyEntity(ref entity);
         }
-
+        [inline(256)]
         public static Archetype GetArchetype(in this Entity entity) {
             return World.Get(entity.WorldIndex).GetArchetype(in entity);
         }
-        
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         public static void SetOwner(in this Entity entity, Entity owner) {
             entity.Get<Owner>().Entity = owner;
         }
         
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         public static ref Entity GetOwner(in this Entity entity) {
             return ref entity.Get<Owner>().Entity;
         }
         
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         public static void AddChild(in this Entity entity, Entity child) {
             child.Get<Owner>().Entity = entity;
         }
-        
+        [inline(256)]
         public static void AddNative<T>(in this Entity entity, T component) where T : unmanaged, IComponent {
             //entity.WorldNative->Buffer->Add(entity.Index, component);
         }
@@ -182,111 +188,115 @@ namespace Wargon.Ecsape {
 
     public partial class World {
         
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         internal ref TComponent GetComponent<TComponent>(in Entity entity) where TComponent: struct,IComponent{
-            var index = Component<TComponent>.Index;
-            if (GetArchetype(in entity).HasComponent(index)) return ref GetPool<TComponent>().Get(entity.Index);
+            var typeID = Component<TComponent>.Index;
+            if (GetArchetype(in entity).HasComponent(typeID)) return ref GetPool<TComponent>().Get(entity.Index);
             var pool = GetPool<TComponent>();
             pool.Add(entity.Index);
-            ChangeEntityArchetype(in entity.Index, in index, true);
+            ChangeEntityArchetype(entity.Index, typeID, true);
             ChangeComponentsAmount(in entity, +1);
             return ref pool.Get(entity.Index);
         }
         
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         internal void Add<TComponent>(in Entity entity) where TComponent : struct, IComponent {
-            var index = Component<TComponent>.Index;
-            if (GetArchetype(in entity).HasComponent(index)) return;
-            ref var pool = ref GetPoolByIndex(index);
+            var typeID = Component<TComponent>.Index;
+            if (GetArchetype(in entity).HasComponent(typeID)) return;
+            ref var pool = ref GetPoolByIndex(typeID);
             pool.Add(entity.Index);
-            ChangeEntityArchetype(in entity.Index, in index, true);
+            ChangeEntityArchetype(entity.Index, typeID, true);
             ChangeComponentsAmount(in entity, +1);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         internal void Add<TComponent>(in Entity entity, in TComponent component) where TComponent : struct, IComponent {
-            var index = Component<TComponent>.Index;
-            if (GetArchetype(in entity).HasComponent(index)) return;
-            var pool = GetPool<TComponent>();
-            pool.Add(in component, entity.Index);
+            var typeID = Component<TComponent>.Index;
+            if (GetArchetype(in entity).HasComponent(typeID)) return;
+            GetPool<TComponent>().Add(in component, entity.Index);
             ChangeComponentsAmount(in entity, +1);
-            ChangeEntityArchetype(in entity.Index, in index, true);
+            ChangeEntityArchetype(entity.Index, typeID, true);
         }
         
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         internal void AddBoxed(in Entity entity, object component) {
-            var index = Component.GetIndex(component.GetType());
-            if (GetArchetype(in entity).HasComponent(index)) return;
-            GetPoolByIndex(index).AddBoxed(component, entity.Index);
+            var typeID = Component.GetIndex(component.GetType());
+            if (GetArchetype(in entity).HasComponent(typeID)) return;
+            GetPoolByIndex(typeID).AddBoxed(component, entity.Index);
             ChangeComponentsAmount(in entity, +1);
-            ChangeEntityArchetype(in entity.Index, in index, true);
+            ChangeEntityArchetype(entity.Index, typeID, true);
         }
         
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         internal unsafe void AddPtr(in Entity entity, void* component, int typeID) {
             if (GetArchetype(in entity).HasComponent(typeID)) return;
             GetPoolByIndex(typeID).AddPtr(component, entity.Index);
             ChangeComponentsAmount(in entity, +1);
-            ChangeEntityArchetype(in entity.Index, in typeID, true);
+            ChangeEntityArchetype(entity.Index, typeID, true);
         }
         
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         internal void AddPtr(in Entity entity, int typeID) {
             if (GetArchetype(in entity).HasComponent(typeID)) return;
             GetPoolByIndex(typeID).Add(entity.Index);
             ChangeComponentsAmount(in entity, +1);
-            ChangeEntityArchetype(in entity.Index, in typeID, true);
+            ChangeEntityArchetype(entity.Index, typeID, true);
         }
         
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         internal void SetBoxed(in Entity entity, object component) {
-            var index = Component.GetIndex(component.GetType());
-            var pool = GetPoolByIndex(index);
-            if (GetArchetype(in entity).HasComponent(index))
+            var typeID = Component.GetIndex(component.GetType());
+            var pool = GetPoolByIndex(typeID);
+            if (GetArchetype(in entity).HasComponent(typeID))
                 pool.SetBoxed(component, entity.Index);
         }
+        [inline(256)]
+        internal void Set<T>(in Entity entity, in T component) where T: struct, IComponent{
+            if (GetArchetype(in entity).HasComponent(Component<T>.Index))
+                GetPool<T>().Set(in component, entity.Index);
+        }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         internal void Remove<T>(in Entity entity) where T : struct, IComponent {
-            var index = Component<T>.Index;
-            if (!GetArchetype(in entity).HasComponent(index)) return;
-            GetPoolByIndex(index).Remove(entity.Index);
-            ref var componentsAmount = ref ChangeComponentsAmount(in entity, -1);
+            var typeID = Component<T>.Index;
+            if (!GetArchetype(in entity).HasComponent(typeID)) return;
+            GetPoolByIndex(typeID).Remove(entity.Index);
+            ref sbyte componentsAmount = ref ChangeComponentsAmount(in entity, -1);
             if (componentsAmount > 0)
-                ChangeEntityArchetype(in entity.Index, in index, false);
+                ChangeEntityArchetype(entity.Index, typeID, false);
             else
                 OnDestroyEntity(in entity, ref componentsAmount);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         internal void Remove(in Entity entity, Type type) {
-            var index = Component.GetIndex(type);
-            if (!GetArchetype(in entity).HasComponent(index)) return;
-            GetPoolByIndex(index).Remove(entity.Index);
+            var typeID = Component.GetIndex(type);
+            if (!GetArchetype(in entity).HasComponent(typeID)) return;
+            GetPoolByIndex(typeID).Remove(entity.Index);
             ref var componentsAmount = ref ChangeComponentsAmount(in entity, -1);
             if (componentsAmount > 0)
-                ChangeEntityArchetype(in entity.Index, in index, false);
+                ChangeEntityArchetype(entity.Index, typeID, false);
             else
                 OnDestroyEntity(in entity, ref componentsAmount);
         }
         
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         internal void Remove(in Entity entity, int type) {
             if (!GetArchetype(in entity).HasComponent(type)) return;
             GetPoolByIndex(type).Remove(entity.Index);
             ref var componentsAmount = ref ChangeComponentsAmount(in entity, -1);
             if (componentsAmount > 0)
-                ChangeEntityArchetype(in entity.Index, in type, false);
+                ChangeEntityArchetype(entity.Index, type, false);
             else
                 OnDestroyEntity(in entity, ref componentsAmount);
         }
         
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         internal bool Has<T>(in Entity entity) where T : struct, IComponent {
             return GetArchetype(in entity).HasComponent(Component<T>.Index);
         }
         
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(256)]
         internal bool Has(in Entity entity, int type) {
             return GetArchetype(in entity).HasComponent(type);
         }
