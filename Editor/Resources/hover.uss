@@ -1,7 +1,7 @@
 .hover1:hover {
     background-color: rgba(236, 236, 236, 255);
     rotate: 90deg;
-    transition-duration: 0.3s;
+    transition-duration: 0.5s;
     transition-delay: 0s;
     transition-timing-function: ease-out-back;
     border-left-width: 0;

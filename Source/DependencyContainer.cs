@@ -39,7 +39,7 @@ namespace Wargon.Ecsape {
             var contructMethod = type.GetMethod(IDependencyContainer.CONSTRUCTOR);
             if (contructMethod != null) {
                 contructMethod.Invoke(instance, null);
-                Debug.Log($"{type.Name} Consruct");
+                //Logs.Show($"{type.Name} Consruct");
             }
             // var parameters = contructMethod.GetParameters();
             // if (parameters.Length > 0) {

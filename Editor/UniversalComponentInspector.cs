@@ -6,7 +6,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
 
-namespace Wargon.Ecsape {
+namespace Wargon.Ecsape.Editor {
     public class BaseVisualElement : VisualElement {
         protected readonly VisualElement rootVisualElement;
         public VisualElement Root => rootVisualElement;
@@ -31,6 +31,16 @@ namespace Wargon.Ecsape {
         
         internal void AddStyleSheet(StyleSheet asset) {
             rootVisualElement.styleSheets.Add(asset);
+        }
+    }
+
+    public static class VisualElementsExt {
+        public static void AddStyleSheetEx(this VisualElement element, StyleSheet asset) {
+            element.styleSheets.Add(asset);
+        }
+        public static void AddVisualTreeEx(this VisualElement element, VisualTreeAsset asset) {
+            var labelFromUxml = asset.Instantiate();
+            element.Add(labelFromUxml);
         }
     }
     public class UniversalComponentInspector : BaseVisualElement {
@@ -60,7 +70,14 @@ namespace Wargon.Ecsape {
             else
                 _foldout.style.backgroundColor = new Color(0.27f, 0.27f, 0.29f);
             
+            // if (ComponentEditor.TryGetColor(_componentType.Name, out var color))
+            //     _inspectorRoot.style.backgroundColor = color;
+            // else
+            //     _inspectorRoot.style.backgroundColor = new Color(0.27f, 0.27f, 0.29f);
+            
             _children = _inspectorRoot.Q<VisualElement>("Children");
+            //_children = new VisualElement();
+            //_foldout.Add(_children);
             var remove = _inspectorRoot.Q<Button>("Close");
             remove.clickable.clicked += () => _onClickRemove.Invoke();
         }
@@ -105,5 +122,15 @@ namespace Wargon.Ecsape {
                 root.Add(_inspectorRoot);
             }
         }
+    }
+
+
+    public class ComponentInspector : VisualElement {
+        private VisualElement _parent;
+
+        public ComponentInspector(VisualElement parent, Type componentType) {
+            _parent = parent;
+        }
+        
     }
 }

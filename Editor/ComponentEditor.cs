@@ -1,24 +1,28 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using UnityEditor;
 using UnityEngine;
 using Wargon.Ecsape.Components;
 
-namespace Wargon.Ecsape {
+namespace Wargon.Ecsape.Editor {
     public static class ComponentEditor {
         private static readonly Dictionary<string, Type> components = new();
         private static readonly Dictionary<string, Color> colors = new(); 
         public static List<string> Names = new();
-
         private static readonly HashSet<Type> excludes = new HashSet<Type> {
             typeof(IComponent),
             typeof(TransformReference),
             typeof(Translation),
             typeof(DestroyEntity),
-            
         };
-        static ComponentEditor() {
 
+        public static void AddExclude(Type type) => excludes.Add(type);
+
+        public static void ReInit() {
+            components.Clear();
+            colors.Clear();
+            Names.Clear();
             var types = FindAllTypeWithInterface(typeof(IComponent), type => !excludes.Contains(type));
             SortByName(types);
             var count = types.Length;
@@ -35,15 +39,16 @@ namespace Wargon.Ecsape {
                 colors.Add(type1.Name, c);
             }
         }
+        static ComponentEditor() {
+            ReInit();
+        }
 
         private static Type[] FindAllTypeWithInterface(Type interfaceType, Func<Type, bool> comprasion = null) {
-            if(comprasion!=null) return  AppDomain.CurrentDomain.GetAssemblies()
-                .SelectMany(s => s.GetTypes())
-                .Where(p => interfaceType.IsAssignableFrom(p) && comprasion(p) && p != interfaceType).ToArray();
-            
-            return  AppDomain.CurrentDomain.GetAssemblies()
-                .SelectMany(s => s.GetTypes())
-                .Where(p => interfaceType.IsAssignableFrom(p) && p != interfaceType).ToArray();
+            if (comprasion != null) {
+                return TypeCache.GetTypesDerivedFrom(typeof(IComponent))
+                .Where(p => comprasion(p) && p != interfaceType).ToArray();
+            }
+            return TypeCache.GetTypesDerivedFrom(typeof(IComponent)).ToArray();
         }
         
         private static void SortByName(Type[] list) {
@@ -68,17 +73,6 @@ namespace Wargon.Ecsape {
         
         public static object Create(Type type) {
             var instance = Activator.CreateInstance(type);
-            // var fileds = instance.GetType().GetFields();
-            // foreach (var fieldInfo in fileds) {
-            //     if(fieldInfo.FieldType.IsGenericType)
-            //         if (fieldInfo.FieldType.GetGenericTypeDefinition() == typeof(ObjectReference<>)) {
-            //             var value = fieldInfo.GetValue(instance);
-            //             var method = fieldInfo.FieldType.GetMethod("Initialize");
-            //             method.Invoke(value, null);
-            //             Debug.Log(value.GetType().GetField("id").GetValue(value));
-            //             fieldInfo.SetValue(instance, value);
-            //         }
-            // }
             return instance;
         }
     }

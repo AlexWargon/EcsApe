@@ -13,169 +13,7 @@ namespace Wargon.Ecsape {
     public struct Option {
         public const int INLINE = 256;
     }
-    public interface IComponent { }
-
-    public interface ISingletoneComponent { }
-
-    public interface IEventComponent { }
-
-    public interface IClearOnEndOfFrame { }
-
-    public interface IOnAddToEntity {
-        void OnCreate();
-    }
-
-    public readonly struct Component<T> where T : struct, IComponent {
-        public static readonly int Index;
-        public static readonly Type Type;
-        public static readonly bool IsSingleTone;
-        public static readonly bool IsTag;
-        public static readonly bool IsEvent;
-        public static readonly bool IsClearOnEnfOfFrame;
-        public static readonly bool IsDisposable;
-        public static readonly int SizeInBytes;
-        public static readonly bool IsOnCreate;
-        public static readonly bool IsUnmanaged;
-        public static readonly bool HasUnityReference;
-        static Component() {
-            Type = typeof(T);
-            Index = Component.GetIndex(Type);
-            ref var componentType = ref Component.GetComponentType(Index);
-            IsSingleTone = componentType.IsSingletone;
-            IsTag = componentType.IsTag;
-            IsEvent = componentType.IsEvent;
-            IsClearOnEnfOfFrame = componentType.IsClearOnEnfOfFrame;
-            IsDisposable = componentType.IsDisposable;
-            SizeInBytes = componentType.SizeInBytes;
-            IsOnCreate = componentType.IsOnCreate;
-            IsUnmanaged = componentType.IsUnmanaged;
-            HasUnityReference = componentType.HasUnityReference;
-            if (IsClearOnEnfOfFrame) {
-                DefaultClearSystems.Add<ClearEventsSystem<T>>();
-            }
-        }
-
-        public static ComponentType AsComponentType() {
-            return new ComponentType(Index, IsSingleTone, IsTag, IsEvent, IsClearOnEnfOfFrame, IsDisposable, Type.Name, SizeInBytes, IsOnCreate, IsUnmanaged, HasUnityReference);
-        }
-    }
-
-    [Serializable]
-    public readonly struct ComponentType : IEquatable<ComponentType> {
-        public readonly int Index;
-        public readonly bool IsSingletone;
-        public readonly bool IsTag;
-        public readonly bool IsEvent;
-        public readonly bool IsClearOnEnfOfFrame;
-        public readonly bool IsDisposable;
-        public readonly NativeString Name;
-        public readonly int SizeInBytes;
-        public readonly bool IsOnCreate;
-        public readonly bool IsUnmanaged;
-        public readonly bool HasUnityReference;
-        public ComponentType(
-            int index, bool isSingletone, bool isTag, bool isEvent, bool clearOnEnfOfFrame, bool disposable, 
-            string name, int size, bool isOnCreate, bool isUnmanaged, bool hasUnityReference) {
-            Index = index;
-            IsSingletone = isSingletone;
-            IsTag = isTag;
-            IsEvent = isEvent;
-            IsClearOnEnfOfFrame = clearOnEnfOfFrame;
-            IsDisposable = disposable;
-            Name = new NativeString(name);
-            SizeInBytes = size;
-            IsOnCreate = isOnCreate;
-            IsUnmanaged = isUnmanaged;
-            HasUnityReference = hasUnityReference;
-        }
-
-        public bool Equals(ComponentType other) {
-            return Index == other.Index;
-        }
-
-        public override int GetHashCode() {
-            return Index;
-        }
-    }
-
-    public struct Component {
-        private static readonly Dictionary<int, Type> typeByIndex;
-        private static readonly Dictionary<Type, int> indexByType;
-        private static ComponentType[] componentTypes;
-        private static int count;
-        public const int DESTROY_ENTITY = 0;
-        static Component() {
-            typeByIndex = new Dictionary<int, Type>();
-            indexByType = new Dictionary<Type, int>();
-            componentTypes = new ComponentType[32];
-        }
-
-        public static int GetIndex(Type type) {
-            if (indexByType.TryGetValue(type, out var idx)) return idx;
-            var index = count;
-            indexByType.Add(type, index);
-            typeByIndex.Add(index, type);
-            var componentType = new ComponentType(index,
-                typeof(ISingletoneComponent).IsAssignableFrom(type),
-                type.GetFields().Length == 0,
-                typeof(IEventComponent).IsAssignableFrom(type),
-                typeof(IClearOnEndOfFrame).IsAssignableFrom(type),
-                typeof(IDisposable).IsAssignableFrom(type), 
-                type.Name,
-                Marshal.SizeOf(type),
-                typeof(IOnAddToEntity).IsAssignableFrom(type),
-                type.IsUnManaged(),
-                type.HasUnityReferenceFields()
-                );
-            AddInfo(ref componentType, index);
-            count++;
-            return index;
-        }
-
-        private static void AddInfo(ref ComponentType type, int index) {
-            if (componentTypes.Length - 1 <= index) Array.Resize(ref componentTypes, index + 16);
-            componentTypes[index] = type;
-        }
-        public static Type GetTypeOfComponent(int index) {
-            return typeByIndex[index];
-        }
-
-        public static ref ComponentType GetComponentType(int index) {
-            return ref componentTypes[index];
-        }
-    }
-
-    public static class ComponentExtensions {
-        internal static Type GetTypeFromIndex(this int index) {
-            return Component.GetTypeOfComponent(index);
-        }
-
-        public static bool IsUnManaged(this Type t)
-        {
-            var result = false;
-
-            if (t.IsPrimitive || t.IsPointer || t.IsEnum)
-                result = true;
-            else if (t.IsGenericType || !t.IsValueType)
-                result = false;
-            else
-                result = t.GetFields(BindingFlags.Public | 
-                                     BindingFlags.NonPublic | BindingFlags.Instance)
-                    .All(x => x.FieldType.IsUnManaged());
-            return result;
-        }
-
-        public static bool HasUnityReferenceFields(this Type type) {
-            var fields = type.GetFields();
-            foreach (var fieldInfo in fields) {
-                if (fieldInfo.FieldType.IsSubclassOf(typeof(UnityEngine.Object))) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-    }
+    
     public static class Generic {
         public static object New(Type genericType, Type elementsType, params object[] parameters) {
             return Activator.CreateInstance(genericType.MakeGenericType(elementsType), parameters);
@@ -537,7 +375,7 @@ namespace Wargon.Ecsape {
             if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
             entities[entity] = count;
             var c = default(T);
-            c.OnCreate();
+            c.OnAdd();
             data[count] = c;
             count++;
         }
@@ -546,7 +384,7 @@ namespace Wargon.Ecsape {
             if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
             entities[entity] = count;
             data[count] = component;
-            data[count].OnCreate();
+            data[count].OnAdd();
             count++;
         }
 
@@ -555,7 +393,7 @@ namespace Wargon.Ecsape {
             if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
             entities[entity] = count;
             data[count] = (T)component;
-            data[count].OnCreate();
+            data[count].OnAdd();
             count++;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -563,7 +401,7 @@ namespace Wargon.Ecsape {
             if (data.Length - 1 <= count) Array.Resize(ref data, count + 16);
             entities[entity] = count;
             data[count] = Marshal.PtrToStructure<T>((IntPtr)component);
-            data[count].OnCreate();
+            data[count].OnAdd();
             count++;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -695,6 +533,73 @@ namespace Wargon.Ecsape {
 
         public IPool AsIPool() {
             return self;
+        }
+    }
+
+    internal sealed class UnmanagedPool<T> : IPool<T> where T : unmanaged, IComponent {
+
+        private UnsafeList<T> data;
+        public int Count { get; }
+        public int Capacity { get; }
+        public ComponentType Info { get; }
+        public void Add(int entity) {
+            data.Add(default(T));
+        }
+
+        public void AddBoxed(object component, int entity) {
+            throw new NotImplementedException();
+        }
+
+        public unsafe void AddPtr(void* component, int entity) {
+            throw new NotImplementedException();
+        }
+
+        public void SetBoxed(object component, int entity) {
+            throw new NotImplementedException();
+        }
+
+        public void Remove(int entity) {
+            throw new NotImplementedException();
+        }
+
+        public bool Has(int entity) {
+            throw new NotImplementedException();
+        }
+
+        public void Resize(int newSize) {
+            throw new NotImplementedException();
+        }
+
+        public object GetRaw(int index) {
+            throw new NotImplementedException();
+        }
+
+        public void Clear() {
+            throw new NotImplementedException();
+        }
+
+        public ref T Get(int entity) {
+            throw new NotImplementedException();
+        }
+
+        public ref T Get(ref Entity entity) {
+            throw new NotImplementedException();
+        }
+
+        public void Set(in T component, int entity) {
+            throw new NotImplementedException();
+        }
+
+        public void Add(in T component, int entity) {
+            throw new NotImplementedException();
+        }
+
+        public T[] GetRawData() {
+            throw new NotImplementedException();
+        }
+
+        public int[] GetRawEntities() {
+            throw new NotImplementedException();
         }
     }
 
@@ -884,13 +789,13 @@ namespace Wargon.Ecsape {
         }
     }
 
-    internal static class Debug {
+    internal static class Logs {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static void Log(object massage) {
+        internal static void Show(object massage) {
             UnityEngine.Debug.Log(massage);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static void LogError(object massage) {
+        internal static void Error(object massage) {
             UnityEngine.Debug.LogError(massage);
         }
     }

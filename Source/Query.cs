@@ -1,4 +1,7 @@
 ﻿
+using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
+
 namespace Wargon.Ecsape {
     using System;
     using System.Collections.Generic;
@@ -421,25 +424,31 @@ namespace Wargon.Ecsape {
             return query;
         }
     }
-    public class With<T1> {
-        
-    }
-    public class With<T1, T2> {
-        
-    }
-    public class With<T1, T2, T3> {
-        
-    }
 
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
     public sealed class FilterAttribute : Attribute {
-        public Type[] types;
-        public FilterAttribute(Type type) {
-            if (type.IsGenericType) {
-                var atributes = type.GetGenericArguments();
-                types = atributes;
+        public Type[] with;
+        public Type[] without;
+        public FilterAttribute(Type withFilter, Type withoutFilter) {
+            if (withFilter.IsGenericType) {
+                var atributes = withFilter.GetGenericArguments();
+                with = atributes;
+            }
+            if (withoutFilter.IsGenericType) {
+                var atributes = withoutFilter.GetGenericArguments();
+                with = atributes;
             }
         }
+        public FilterAttribute(Type withFilter) {
+            if (withFilter.IsGenericType) {
+                var atributes = withFilter.GetGenericArguments();
+                with = atributes;
+            }
+
+            without = Array.Empty<Type>();
+        }
     }
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
     public sealed class WithAttribute : Attribute {
         public Type[] Types;
         public WithAttribute(params Type[] types) {
@@ -453,6 +462,74 @@ namespace Wargon.Ecsape {
             Types = types;
         }
     }
+
+    public unsafe class Query2 {
+        internal World world;
+        internal UnsafeHashMap<int,Entity> entities;
+        internal UnsafeHashSet<Entity> _set;
+        public Query2(World world) {
+            this.world = world;
+            entities = new UnsafeHashMap<int,Entity>();
+        }
+        private void Remove(int entity) {
+            entities.Remove(entity);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void Add(int entity) {
+            entities.Add(entity, world.GetEntity(entity));
+        }
+
+        public Enumerator GetEnumerator() {
+            return new Enumerator(this);
+        }
+        
+        public ref struct Enumerator {
+            public UnsafeHashMap<int, Entity>.Enumerator EnumeratorHashMap;
+            public Enumerator(Query2 query) {
+                EnumeratorHashMap = query.entities.GetEnumerator();
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public bool MoveNext() {
+                return EnumeratorHashMap.MoveNext();
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public void Reset() {
+                EnumeratorHashMap.Reset();
+            }
+
+            public ref Entity Current {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get => ref EnumeratorHashMap.Current.Value;
+            }
+        }
+    }
+
+    public unsafe struct QueryStruct {
+        private QueryInternal* _queryInternal;
+        public void Add(int entity) {
+            _queryInternal->Add(entity);
+        }
+        public void Remove(int entity) {
+            _queryInternal->Remove(entity);
+        }
+        public struct QueryInternal {
+            public UnsafeHashSet<int> entities;
+            public QueryInternal* Create() {
+                var ptr = (QueryInternal*)UnsafeUtility.Malloc(sizeof(QueryInternal), UnsafeUtility.AlignOf<QueryInternal>(), Allocator.Persistent);
+                ptr->entities = new UnsafeHashSet<int>(32, Allocator.Persistent);
+                return ptr;
+            }
+            public void Add(int entity) {
+                entities.Add(entity);
+            }
+            public void Remove(int entity) {
+                entities.Remove(entity);
+            }
+        }
+    }
+
     public class Query : IEquatable<Query> {
         internal int count;
         private int[] entities;
@@ -619,12 +696,12 @@ namespace Wargon.Ecsape {
             return entities;
         }
         
-        internal struct EntityToUpdate {
-            public int entity;
-            public bool add;
-        }
-    }
 
+    }
+    internal struct EntityToUpdate {
+        public int entity;
+        public bool add;
+    }
     public ref struct Enumerator {
         public Query query;
         public int index;

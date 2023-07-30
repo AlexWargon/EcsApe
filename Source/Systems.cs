@@ -182,6 +182,7 @@ namespace Wargon.Ecsape {
                 fixedUpdates[fixedUpdatesCounts++] = system;
                 if (world.bufferGetten) {
                     var cmdsystem = new EntityCommandBufferSystem();
+                    InitDependencies(cmdsystem);
                     cmdsystem.OnCreate(world);
                     fixedUpdates[fixedUpdatesCounts++] = cmdsystem;
                     world.bufferGetten = false;
@@ -192,6 +193,7 @@ namespace Wargon.Ecsape {
                 updates[updatesCount++] = system;
                 if (world.bufferGetten) {
                     var cmdsystem = new EntityCommandBufferSystem();
+                    InitDependencies(cmdsystem);
                     cmdsystem.OnCreate(world);
                     updates[updatesCount++] = cmdsystem;
                     world.bufferGetten = false;
@@ -216,6 +218,7 @@ namespace Wargon.Ecsape {
             return this;
         }
 
+        // ReSharper disable Unity.PerformanceAnalysis
         internal void Update(float dt) {
             for (var i = 0; i < updatesCount; i++) {
                 updates[i].OnUpdate(dt);
@@ -430,7 +433,7 @@ namespace Wargon.Ecsape {
             end.Add(new ClearViewSystem());
             end.Add(new DestroyEntitiesSystem());
             end.Add(new SyncTransformsSystem());
-            end.Add(new ClearEventsSystem<GameObjectSpawnedEvent>());
+            end.Add(new ClearEventsSystem<EntityLinkSpawnedEvent>());
         }
     }
 
@@ -447,7 +450,7 @@ namespace Wargon.Ecsape {
         private CommandBuffer cmd;
         private World _world;
         public void OnCreate(World world) {
-            cmd = world.GetCmdBuffer();
+            cmd = world.GetCommandBuffer();
             UnityEngine.Debug.Log("CMD SYSTEM ADDED");
         }
 
@@ -477,6 +480,13 @@ namespace Wargon.Ecsape {
                 transform.value.localRotation = translation.rotation;
                 transform.value.localScale = translation.scale;
             }
+        }
+    }
+    [AttributeUsage(AttributeTargets.Class)]
+    public class ClearAttribute : Attribute {
+        public Type Type;
+        public ClearAttribute(Type type) {
+            Type = type;
         }
     }
 }

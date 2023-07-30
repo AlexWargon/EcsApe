@@ -13,9 +13,7 @@ namespace Wargon.Ecsape.Editor {
         private EntityLink target;
         private List<string> showList = new List<string>();
         private Action OnAddRemoveComponent;
-        [MenuItem("Window/UI Toolkit/ComponentsListPopup")]
-        public static void Show(Vector2 pos, EntityLink target, Action onAddRemove)
-        {
+        public static void Show(Vector2 pos, EntityLink target, Action onAddRemove) {
             ComponentsListPopup popup = GetWindow<ComponentsListPopup>();
             popup.SetTarget(target);
             popup.titleContent = new GUIContent("ComponentsListPopup");
@@ -23,7 +21,7 @@ namespace Wargon.Ecsape.Editor {
             popup.OnAddRemoveComponent = onAddRemove;
         }
 
-        public void SetTarget(EntityLink link) => target = link;
+        private void SetTarget(EntityLink link) => target = link;
         
         public void CreateGUI()
         {
@@ -55,7 +53,7 @@ namespace Wargon.Ecsape.Editor {
                 var componentToAddInstance = ComponentEditor.Create((string)x.FirstOrDefault());
                 
                 if (componentToAddInstance != null) {
-                    if (target.Linked) {
+                    if (target.IsLinked) {
                         target.Entity.AddBoxed(componentToAddInstance);
                         OnAddRemoveComponent?.Invoke();
                     }

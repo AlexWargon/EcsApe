@@ -119,7 +119,7 @@ namespace Wargon.Ecsape {
             var newPool = new ObjectPool<EntityLink>(
                 () => {
                     var o = Object.Instantiate(prefab);
-                    if (!o.Linked) {
+                    if (!o.IsLinked) {
                         var e = World.Default.CreateEntity();
                         o.Link(ref e);
                     }

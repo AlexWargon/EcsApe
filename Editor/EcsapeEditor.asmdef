@@ -1,0 +1,16 @@
+{
+    "name": "EcsapeEditor",
+    "rootNamespace": "Wargon.Ecsape.Editor",
+    "references": [
+        "GUID:4ffe030d3442a7a428cb281c2c2d181b"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,27 +1,30 @@
-﻿using UnityEditor;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine.UIElements;
 
 namespace Wargon.Ecsape.Editor {
     [CustomEditor(typeof(EntityLink))]
     public class EntityLinkEditor : UpdatableEditor {
-        private int archetypeCurrent;
-        private int archetypePrevious;
+        private int archetypeCurrentID;
+        private int archetypePreviousID;
         private object[] componentsCache;
         private VisualElement componentsRoot;
         private EntityLink entityLink;
         private BaseVisualElement rootContainer;
         private Label label;
         private bool inited;
-        public void OnDestroy() {
-            Inspectors.Clear();
-            ComponentInspectors.Clear();
+
+        private void OnDestroy() {
+            //ComponentDrawer.Clear();
         }
+
         private void SetEntityIndex(string text) {
             if(label== null) return;
             label.text = text;
         }
-        
         
         public override VisualElement CreateInspectorGUI() {
             entityLink = target as EntityLink;
@@ -54,6 +57,7 @@ namespace Wargon.Ecsape.Editor {
             addBtn.clickable.clicked += () => {
                 ComponentsListPopup.Show(addBtn.LocalToWorld(addBtn.layout).center, entityLink, DrawEditor);
             };
+            
             rootContainer.Add(entityInspector);
             rootContainer.Add(componentsRoot);
             DrawEditor();
@@ -80,31 +84,66 @@ namespace Wargon.Ecsape.Editor {
             SetEntityIndex("DEAD");
             for (var index = 0; index < entityLink.Components.Count; index++) {
                 var component = entityLink.Components[index];
-                ComponentInspectors.Get(component.GetType())
-                    .DrawEditor(component, componentsRoot, entityLink, entityLink.Components);
+                // ComponentInspectors.Get(component.GetType())
+                //     .DrawEditor(component, componentsRoot, entityLink, entityLink.Components);
+
+                var drawer = ComponentDrawer.GetDrawer(component);
+                drawer.SetParent(componentsRoot);
+                drawer.UpdateData(component, entityLink);
             }
         }
 
+
+        private Archetype previousArch;
+        private Archetype currentArch;
+        protected override float Framerate => 29;
+
         private void DrawRuntime() {
-            if (entityLink.Linked) {
+            if (entityLink.IsLinked) {
                 var e = entityLink.Entity;
-                
+                var archetype = e.GetArchetype();
                 if(!e.IsNull())
-                    SetEntityIndex($"ENTITY:{e.Index:0000000} ARCHETYPE:{e.GetArchetype().id}");
+                    SetEntityIndex($"ENTITY:{e.Index:0000000} ARCHETYPE:{archetype.id}");
                 else 
                     SetEntityIndex("DEAD");
                 
-                var archetype = e.GetArchetype();
-                archetypeCurrent = archetype.id;
-                if (archetypeCurrent != archetypePrevious) componentsRoot.Clear();
-                componentsCache = archetype.GetAllComponents(in e);
-                for (var index = 0; index < componentsCache.Length; index++) {
-                    var component = componentsCache[index];
-                    var inspector = ComponentInspectors.Get(component.GetType());
-                    inspector.DrawRunTime(component, componentsRoot, e);
-                }
                 
-                archetypePrevious = archetypeCurrent;
+                currentArch = archetype;
+                archetypeCurrentID = archetype.id;
+                //if (archetypeCurrent != archetypePrevious) componentsRoot.Clear();
+                if (archetypeCurrentID != archetypePreviousID && previousArch != null) {
+                    (IEnumerable<int> delta, bool added) = archetype.GetDelta(previousArch);
+                    if (added) {
+                        foreach (var i in delta) {
+                            var drawer = ComponentDrawer.GetDrawer(Component.GetTypeOfComponent(i));
+                            if(drawer!=null)
+                                componentsRoot.Add(drawer);
+                        }
+                    }
+                    else {
+                        foreach (var i in delta) {
+                            var drawer = ComponentDrawer.GetDrawer(Component.GetTypeOfComponent(i));
+                            if(drawer!=null)
+                                componentsRoot.RemoveWithCheck(drawer);
+                        }
+                    }
+                    
+                }
+
+                var count = archetype.GetAllComponents(e.Index, ref componentsCache);
+                for (var index = 0; index < count; index++) {
+                    var component = componentsCache[index];
+                    // var inspector = ComponentInspectors.Get(component.GetType());
+                    // inspector.DrawRunTime(component, componentsRoot, e);
+                    //
+                    //if(Component.GetComponentType(Component.GetIndex(component.GetType())).IsTag) continue;
+                    var drawer = ComponentDrawer.GetDrawer(component);
+                    drawer.SetParent(componentsRoot);
+                    drawer.UpdateData(component, entityLink);
+                }
+
+                previousArch = archetype;
+                archetypePreviousID = archetypeCurrentID;
             }
         }
     }

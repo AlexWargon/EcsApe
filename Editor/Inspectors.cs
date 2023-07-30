@@ -10,7 +10,7 @@ using Wargon.Ecsape.Components;
 using Wargon.Ecsape.Editor;
 using Object = UnityEngine.Object;
 
-namespace Wargon.Ecsape {
+namespace Wargon.Ecsape.Editor {
     public static class Inspectors {
         private static Dictionary<Type, BaseInspector> inspectors = new ();
         static bool inited = false;
@@ -115,12 +115,6 @@ namespace Wargon.Ecsape {
         }
     }
 
-    public static class EditorUtils {
-        public static void SetDirty(Object obj) {
-            if(obj is not null)
-                EditorUtility.SetDirty(obj);
-        }
-    }
     public abstract class BaseInspector : VisualElement {
         private object data;
         protected Entity TargetEntity;
@@ -631,6 +625,16 @@ namespace Wargon.Ecsape {
         public Entity value;
         private IntegerField _integerField;
         private ObjectField _objectField;
+
+        public EntityField()  {
+            _integerField = new IntegerField($"{value.Index}") {
+                isReadOnly = true,
+                focusable = false
+            };
+            _objectField = new ObjectField($"{value.Index}") {
+                objectType = typeof(EntityLink)
+            };
+        }
         public EntityField(Entity entity) {
             value = entity;
             _integerField = new IntegerField($"{value.Index}") {
@@ -641,8 +645,8 @@ namespace Wargon.Ecsape {
                 objectType = typeof(EntityLink)
             };
         }
-
-        public void UpdateView(Entity entity) {
+        
+        public void UpdateView(Entity entity, string labelName = null) {
             value = entity;
             if (!value.IsNull()) {
                 if (value.Has<ViewLink>()) {
@@ -651,6 +655,9 @@ namespace Wargon.Ecsape {
                         if(Contains(_integerField))
                             Remove(_integerField);
                         _objectField.value = link;
+                        if (labelName != null) {
+                            _objectField.label = labelName;
+                        }
                         Add(_objectField);
                     }
                 }
@@ -658,7 +665,10 @@ namespace Wargon.Ecsape {
                     if (!Contains(_integerField)) {
                         if(Contains(_objectField))
                             Remove(_objectField);
-                        _integerField.name = $"{value.Index}";
+                        //_integerField.name = $"{value.Index}";
+                        if (labelName != null) {
+                            _integerField.label = labelName;
+                        }
                         Add(_integerField);
                     }
                 }
@@ -674,7 +684,7 @@ namespace Wargon.Ecsape {
         }
 
         private static string GetLabel(int index) {
-            return $"element [{index}]";
+            return $"element[{index}]";
         }
         public void UpdateViewAsElement(Entity entity, int index) {
             value = entity;
@@ -706,6 +716,7 @@ namespace Wargon.Ecsape {
                 Add(_integerField);
             }
         }
+
     }
     
     public class EnumInspector : BaseInspector {

@@ -42,14 +42,28 @@ namespace Wargon.Ecsape {
         public static void RemoveLast(this System.Collections.IList list) {
             list.RemoveAt(list.Count - 1);
         }
-
+        public static bool ConstainsType(this List<IComponent> list, object item) {
+            var type = item.GetType();
+            for (var i = 0; i < list.Count; i++) {
+                if (list[i].GetType() == type) return true;
+                
+            }
+            return false;
+        }
+        public static bool ConstainsType(this List<ComponentData> list, object item) {
+            var type = item.GetType();
+            for (var i = 0; i < list.Count; i++) {
+                if (list[i].ComponentType == type) return true;
+                
+            }
+            return false;
+        }
         public static bool ConstainsType(this List<object> list, object item) {
             var type = item.GetType();
             for (var i = 0; i < list.Count; i++) {
                 if (list[i].GetType() == type) return true;
                 
             }
-
             return false;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -66,7 +80,6 @@ namespace Wargon.Ecsape {
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NativeQuery AsNative(this Query query) {
-            //query.WorldInternal.AddDirtyQuery(query);
             return new NativeQuery(query);
         }
         

@@ -18,7 +18,7 @@ namespace Wargon.Ecsape {
     }
 #if UNITY_EDITOR
     [CustomEditor(typeof(WorldHolder))]
-    public class WorldHolderEditor : Editor {
+    public class WorldHolderEditor : UnityEditor.Editor {
         public override VisualElement CreateInspectorGUI() {
             var view = target as WorldHolder;
             var world = view.World;

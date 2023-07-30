@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Wargon.Ecsape.Components;
 using inline = System.Runtime.CompilerServices.MethodImplAttribute;
@@ -100,7 +101,7 @@ namespace Wargon.Ecsape {
             return entity.World.GetComponentAmount(in entity);
         }
         [inline(256)]
-        public static object[] GetAllComponents(in this Entity entity) {
+        public static List<object> GetAllComponents(in this Entity entity) {
             return entity.World.GetArchetype(entity).GetAllComponents(entity);
         }
         
@@ -150,6 +151,10 @@ namespace Wargon.Ecsape {
         where TComponent2 : struct, IComponent {
             ValueTuple<TComponent1,TComponent2> turple = default((TComponent1, TComponent2));
             
+        }
+
+        internal static object GetBoxed(in this Entity entity, Type type) {
+            return entity.World.GetPoolByIndex(Component.GetIndex(type)).GetRaw(entity.Index);
         }
 
     }

@@ -7,24 +7,30 @@ namespace Wargon.Ecsape
 {
     [DisallowMultipleComponent]
     public class EntityLink : MonoBehaviour, IEntityLink, ISerializationCallbackReceiver {
-        public string WorldName = "Default";
-        public bool Linked => linked;
-        private bool linked;
-        public ConvertOption option = ConvertOption.Stay;
+        
         private int id;
-        public ref Entity Entity => ref World.GetOrCreate(WorldName).GetEntity(id);
-        public World World => World.GetOrCreate(WorldName);
-        [SerializeReference] public List<object> Components = new ();
+        private bool _isLinked;
+        public string WorldName = "Default";
+        public ConvertOption option = ConvertOption.Stay;
+        [SerializeReference] public List<object> Components;
+
+        public int ComponentsCount = 0;
+        public bool IsLinked => _isLinked;
+        private Entity nullEntity;
+        public ref Entity Entity => ref World.GetEntity(id);
+        public World World;
+        
         private void Start() {
-            if(Linked) return;
+            if(IsLinked) return;
+            World = World.GetOrCreate(WorldName);
             var e = World.CreateEntity();
-            e.Add(new GameObjectSpawnedEvent{Link = this});
-            
+            e.Add(new EntityLinkSpawnedEvent{Link = this});
         }
 
         public void Link(ref Entity entity) {
-            if(linked) return;
+            if(_isLinked) return;
             id = entity.Index;
+            World = entity.World;
             foreach (var component in Components) {
                 entity.AddBoxed(component);
             }
@@ -44,38 +50,38 @@ namespace Wargon.Ecsape
                     break;
             }
 
-            linked = true;
+            _isLinked = true;
         }
-        //
-        // private void OnDestroy() {
-        //     if(option != ConvertOption.Destroy)
-        //         if (!Entity.IsNull()) {
-        //             Entity.Destroy();
-        //         }
-        // }
 
         public void OnBeforeSerialize() {
+            
+            if (Components == null) Components = new List<object>();
             Components.RemoveAll(item => ReferenceEquals(item,null));
+            ComponentsCount = Components.Count;
         }
 
         public void OnAfterDeserialize() {
             
         }
 
-        // public static EntityLink Spawn(EntityLink prefab, Vector3 position, Quaternion rotation, World world) {
-        //     var obj = Instantiate(prefab, position, rotation);
-        //     var e = world.CreateEntity();
-        //     obj.Link(ref e);
-        //     return obj;
-        // }
-
-        public static void Spawn(EntityLink prefab, Vector3 position, Quaternion rotation, World world) {
+        public static Entity Spawn(EntityLink prefab, Vector3 position, Quaternion rotation, World world) {
             var obj = Instantiate(prefab, position, rotation);
             var e = world.CreateEntity();
-            e.Add(new GameObjectSpawnedEvent{Link = obj});
+            e.Add(new EntityLinkSpawnedEvent{Link = obj});
+            return e;
         }
     }
 
+    [Serializable]
+    public struct ComponentData {
+        [SerializeReference] public object Data;
+        [SerializeReference] public Type ComponentType;
+
+        public void Update(object component) {
+            Data = component;
+            ComponentType = component.GetType();
+        }
+    }
     
     public enum ConvertOption {
         Stay,
@@ -88,17 +94,12 @@ namespace Wargon.Ecsape
         void Link(ref Entity entity);
     }
 
-    public struct GameObjectSpawnedEvent : IComponent {
+    public struct EntityLinkSpawnedEvent : IComponent {
         public IEntityLink Link;
     }
-    internal sealed class ConvertEntitySystem : ISystem, IOnCreate {
-        private Query _gameObjects;
-        private IPool<GameObjectSpawnedEvent> _pool;
-        
-        public void OnCreate(World world) {
-            _gameObjects = world.GetQuery().With<GameObjectSpawnedEvent>();
-        }
-        
+    internal sealed class ConvertEntitySystem : ISystem {
+        [With(typeof(EntityLinkSpawnedEvent))] Query _gameObjects;
+        IPool<EntityLinkSpawnedEvent> _pool;
         public void OnUpdate(float deltaTime) {
             if(_gameObjects.IsEmpty) return;
             foreach (ref var entity in _gameObjects) {
@@ -133,106 +134,6 @@ namespace Wargon.Ecsape
             return reference.Value;
         }
     }
-
-    // [System.Serializable]
-    // public struct ObjectReference<T> where T : UnityEngine.Object {
-    //
-    //     public uint id;
-    //
-    //     public ObjectReference(T obj) {
-    //         this.id = 0u;
-    //         RuntimeObjectReference.GetObject(ref this.id, obj);
-    //     }
-    //
-    //     public T Value => RuntimeObjectReference.GetObject<T>(ref this.id, null);
-    //
-    //     public static implicit operator ObjectReference<T>(T obj) {
-    //         return new ObjectReference<T>(obj);
-    //     }
-    //
-    //     public static implicit operator T(ObjectReference<T> reference) {
-    //         return reference.Value;
-    //     }
-    //
-    // }
-    //
-    // public class ObjectReferenceData {
-    //
-    //     private readonly System.Collections.Generic.Dictionary<int, uint> objectInstanceIdToIdx = new System.Collections.Generic.Dictionary<int, uint>();
-    //     private UnityEngine.Object[] objects;
-    //     private uint nextId = 1u;
-    //
-    //     public T ReadObject<T>(uint id) where T : UnityEngine.Object {
-    //         var idx = id - 1u;
-    //         if (id <= 0u || idx > this.objects.Length) return null;
-    //         return (T)this.objects[idx];
-    //     }
-    //
-    //     public T GetObject<T>(ref uint id, T obj) where T : UnityEngine.Object {
-    //         if (id == 0) {
-    //             if (obj == null) return null;
-    //             var instanceId = obj.GetInstanceID();
-    //             /*if (instanceId <= 0) {
-    //                 throw new System.Exception("Persistent asset is required");
-    //             }*/
-    //             if (this.objectInstanceIdToIdx.TryGetValue(instanceId, out var index) == true) {
-    //                 id = index + 1u;
-    //                 return (T)this.objects[index];
-    //             }
-    //
-    //             {
-    //                 var size = this.nextId * 2u;
-    //                 System.Array.Resize(ref this.objects, (int)size);
-    //                 id = this.nextId++;
-    //                 var idx = id - 1;
-    //                 this.objectInstanceIdToIdx.Add(instanceId, idx);
-    //                 this.objects[idx] = obj;
-    //                 return obj;
-    //             }
-    //         } else {
-    //             var idx = id - 1u;
-    //             return (T)this.objects[idx];
-    //         }
-    //     }
-    //     
-    // }
-    //
-    // public static class RuntimeObjectReference {
-    //
-    //     private static ObjectReferenceData dataArr;
-    //
-    //     [UnityEngine.RuntimeInitializeOnLoadMethodAttribute(UnityEngine.RuntimeInitializeLoadType.BeforeSplashScreen)]
-    //     public static void Initialize() {
-    //
-    //         dataArr = null;
-    //         
-    //     }
-    //     
-    //     private static ObjectReferenceData GetData() {
-    //
-    //         if (dataArr == null) {
-    //             dataArr = new ObjectReferenceData();
-    //         }
-    //         return dataArr;
-    //
-    //     }
-    //
-    //     public static T ReadObject<T>(uint id, ushort worldId) where T : UnityEngine.Object {
-    //         if (worldId == 0) return null;
-    //         var data = GetData();
-    //         return data.ReadObject<T>(id);
-    //     }
-    //
-    //
-    //     public static T GetObject<T>(ref uint id, T obj) where T : UnityEngine.Object {
-    //         var data = GetData();
-    //         return data.GetObject(ref id, obj);
-    //     }
-    //
-    // }
-    
-    
-    
     
     public abstract class SingletonSO<T> : ScriptableObject where T : ScriptableObject {
         private static T instance = null;

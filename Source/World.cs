@@ -1,4 +1,6 @@
-﻿namespace Wargon.Ecsape {
+﻿using UnityEngine.LowLevel;
+
+namespace Wargon.Ecsape {
     using Pools;
     using System;
     using System.Collections.Generic;
@@ -11,7 +13,7 @@
         private readonly DirtyQueries dirtyQueries;
         private readonly ArrayList<int> freeEntities;
         private readonly string name;
-        internal string Name => name;
+        
         private readonly byte selfIndex;
         internal byte Index => selfIndex;
         
@@ -28,6 +30,7 @@
         private int queriesCount;
         internal int QueriesCount => queriesCount;
         public int ActiveEntitiesCount => activeEntitiesCount;
+        public string Name => name;
         static World() {
             worlds = new World[4];
             lastWorldIndex = 0;
@@ -54,7 +57,25 @@
             systems.SetInjector(DI.GetOrCreateContainer());
         }
 
-        public void Init() => systems.Init();
+        public void Init() {
+            systems.Init();
+            // var systemRoot = new PlayerLoopSystem();
+            // systemRoot.subSystemList = new PlayerLoopSystem[]
+            // {
+            //     new PlayerLoopSystem()
+            //     {
+            //         updateDelegate = UpdateDelegate,
+            //         type = typeof(TestUpdate)
+            //     }
+            // };
+            // PlayerLoop.SetPlayerLoop(systemRoot);
+        }
+        public struct TestUpdate {
+            
+        }
+        private void UpdateDelegate() {
+            UnityEngine.Debug.Log("Update ecs");
+        }
 
         private void Destroy() {
             
@@ -227,7 +248,7 @@
             return (IPool<T>)pools[poolKeys[idx]];
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal ref IPool GetPoolByIndex(int idx) {
+        public ref IPool GetPoolByIndex(int idx) {
             if (idx >= poolKeys.Length - 1) Array.Resize(ref poolKeys, idx + 4);
             if (poolKeys[idx] == 0) {
                 if (poolsCount >= pools.Length - 1) Array.Resize(ref pools, idx + 4);
@@ -428,7 +449,8 @@
         public const string DEFAULT = "Default";
         public static int ENTITIES_CACHE = 256;
         
-        private static readonly Dictionary<string, byte> ids = new();
+        private static readonly Dictionary<string, byte> indexByName = new();
+        private static readonly Dictionary<byte, string> nameByIndex = new();
         private static byte defaultIndex = 255;
 
         private static byte DefaultIndex {
@@ -440,35 +462,43 @@
                 return defaultIndex;
             }
         }
-        
+
+        public static bool IsNull(string name) {
+            if (indexByName.TryGetValue(name, out var index)) {
+                return Get(index) == null;
+            }
+            return false;
+        }
         public static World GetOrCreate(string name) {
             if (string.IsNullOrEmpty(name))
                 name = DEFAULT;
-            if (ids.TryGetValue(name, out var index))
+            if (indexByName.TryGetValue(name, out var index))
                 return Get(index);
             
             var world = new World(name);
-            ids.Add(name, world.Index);
+            indexByName.Add(name, world.Index);
+            nameByIndex.Add(world.Index, name);
             //Debug.Log($"World {name} was not existed but created");
             return world;
         }
-        
+
+        public static string GetName(byte index) => nameByIndex[index];
 
         public static World GetOrCreate() {
-            if (ids.TryGetValue(DEFAULT, out var index))
+            if (indexByName.TryGetValue(DEFAULT, out var index))
                 return Get(index);
             var world = new World(DEFAULT);
-            ids.Add(DEFAULT, world.Index);
+            indexByName.Add(DEFAULT, world.Index);
             //Debug.Log($"World {DEFAULT} was not existed but created");
             return world;
         }
         internal static void Add(string name, byte index) {
-            if(ids.ContainsKey(name)) return;
-            ids.Add(name,index);
+            if(indexByName.ContainsKey(name)) return;
+            indexByName.Add(name,index);
         }
 
         public static void Destory(World world) {
-            ids.Remove(world.name);
+            indexByName.Remove(world.name);
             world.Destroy();
             worlds[world.Index] = worlds[lastWorldIndex-1];
             worlds[lastWorldIndex - 1] = null;
@@ -495,17 +525,17 @@
         internal bool bufferGetten = false;
         private bool bufferCreated;
         internal CommandBuffer _buffer;
-        public ref CommandBuffer GetCmdBuffer() {
+        public ref CommandBuffer GetCommandBuffer() {
             bufferGetten = true;
             if (!bufferCreated) {
-                _buffer = new CommandBuffer(10000);
+                _buffer = new CommandBuffer(1024);
                 bufferCreated = true;
             }
             return ref _buffer;
         }
         internal ref CommandBuffer GetCmdBufferInternal() {
             if (!bufferCreated) {
-                _buffer = new CommandBuffer(10000);
+                _buffer = new CommandBuffer(1024);
                 bufferCreated = true;
             }
             return ref _buffer;
