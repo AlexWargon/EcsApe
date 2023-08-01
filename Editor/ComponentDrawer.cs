@@ -9,26 +9,10 @@ using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
 
 namespace Wargon.Ecsape.Editor {
-    public class ComponentDrawer : VisualElement {
-        private static readonly Dictionary<string, ComponentDrawer> Drawers = new();
-        public static void Clear() => Drawers.Clear();
-        public static ComponentDrawer GetDrawer(Type type) {
-            return Drawers.TryGetValue(type.Name, out var drawer) ? drawer : null;
-        }
-        public static ComponentDrawer GetDrawer(int index) {
-            var type = Component.GetTypeOfComponent(index);
-            return Drawers.TryGetValue(type.Name, out var drawer) ? drawer : null;
-        }
-        public static ComponentDrawer GetDrawer(object component) {
-            var type = component.GetType();
-            if (Drawers.TryGetValue(type.Name, out var drawer)) return drawer;
-            drawer = new ComponentDrawer(type, component);
-            Drawers.Add(type.Name, drawer);
-            return drawer;
-        }
+    public partial class ComponentDrawer : VisualElement {
+
 
         private readonly List<FieldData> fieldsData = new();
-        private readonly FieldInfo[] fieldsInfo;
         private readonly List<VisualElement> fieldsView = new();
         private VisualElement fieldsRoot;
         private VisualElement parent;
@@ -42,7 +26,7 @@ namespace Wargon.Ecsape.Editor {
         private Dictionary<string, FieldInfo[]> nestedFieldInfo = new Dictionary<string, FieldInfo[]>();
         private Dictionary<string, List<VisualElement>> nestedFieldVies = new Dictionary<string, List<VisualElement>>();
         private IMGUIContainer iMGUIContainer;
-
+        
         public ComponentDrawer(Type type, object component) {
             componentType = type;
             //var temp = new BaseVisualElement();
@@ -60,8 +44,9 @@ namespace Wargon.Ecsape.Editor {
             
             var remove = componentInspector.Q<Button>("Close");
             remove.clickable.clicked += OnClickRemoveComponent;
+
             
-            fieldsInfo = componentType.GetFields();
+            var fieldsInfo = componentType.GetFields();
             //iMGUIContainer = new IMGUIContainer(DrawComponentFieldsIMGUI);
             //fieldsRoot.Add(iMGUIContainer);
             foreach (var fieldInfo in fieldsInfo) {
@@ -86,8 +71,9 @@ namespace Wargon.Ecsape.Editor {
                 // }
                 // else 
                 //{
-                fieldsData.Add(new FieldData(fieldInfo, componentType));
-                var fieldDrawer = CreateOrUpdateField(fieldInfo.GetValue(component), component, fieldInfo);
+                var fdata = new FieldData(fieldInfo, componentType);
+                fieldsData.Add(fdata);
+                var fieldDrawer = CreateOrUpdateField(fieldInfo.GetValue(component), component, fdata);
                 fieldsView.Add(fieldDrawer);
                 fieldsRoot.Add(fieldDrawer);
                     
@@ -120,14 +106,6 @@ namespace Wargon.Ecsape.Editor {
                     else if (type == TypesCache.Vector4)SetValue(info,EditorGUILayout.Vector4Field(label, (Vector4)oldValue), oldValue);
                 }
             }
-            // else {
-            //     var fields = componentType.GetFields();
-            //     foreach (var fieldInfo in fields) {
-            //         var type = fieldInfo.FieldType;
-            //         if (type == typeof(int)) EditorGUILayout.IntField(fieldInfo.Name, 0);
-            //         if (type == typeof(float)) EditorGUILayout.FloatField(fieldInfo.Name, 0F);
-            //     }
-            // }
         }
         private void OnClickRemoveComponent() {
             if (Runtime)
@@ -141,6 +119,14 @@ namespace Wargon.Ecsape.Editor {
         public void UpdateData(object component, EntityLink target) {
             this.currentComponent = component;
             this.target = target;
+            
+            for (var index = 0; index < fieldsData.Count; index++) {
+                var fieldInfo = fieldsData[index];
+                var fieldValue = fieldInfo.GetValue(component);
+                var drawer = fieldsView[index];
+                CreateOrUpdateField(fieldValue, component, fieldInfo, drawer);
+            }
+            
             // fieldsRoot.Remove(iMGUIContainer);
             // iMGUIContainer = new IMGUIContainer(DrawComponentFieldsIMGUI);
             // fieldsRoot.Add(iMGUIContainer);
@@ -164,12 +150,13 @@ namespace Wargon.Ecsape.Editor {
             //     }
             // }
             
-            for (var index = 0; index < fieldsInfo.Length; index++) {
-                var fieldInfo = fieldsInfo[index];
-                var fieldValue = fieldInfo.GetValue(component);
-                var drawer = fieldsView[index];
-                CreateOrUpdateField(fieldValue, component, fieldInfo, drawer);
-            }
+            // for (var index = 0; index < fieldsInfo.Length; index++) {
+            //     var fieldInfo = fieldsInfo[index];
+            //     var fieldValue = fieldInfo.GetValue(component);
+            //     var drawer = fieldsView[index];
+            //     CreateOrUpdateField(fieldValue, component, fieldInfo, drawer);
+            // }
+
         }
 
         public void SetParent(VisualElement parent) {
@@ -195,12 +182,10 @@ namespace Wargon.Ecsape.Editor {
                     array.SetValue(newValue, idx);
                     return;
                 }
+
                 list[idx] = newValue;
             }
-            
-            
-            //if (fieldDrawer is ObjectField objectField) objectField.objectType = value.GetType();
-            Debug.Log($"index{elementIndex}");
+
             fieldDrawer.label = $"element[{elementIndex}]";
             fieldDrawer.RegisterValueChangedCallback(evt => {
                 if (evt.target != fieldDrawer)
@@ -214,8 +199,8 @@ namespace Wargon.Ecsape.Editor {
                 }
                 SetValue(evt.newValue);
             });
-            if (fieldValue.Equals(fieldDrawer.value)) return fieldDrawer;
             
+            if (fieldValue.Equals(fieldDrawer.value)) return fieldDrawer;
             fieldDrawer.SetValueWithoutNotify(fieldValue);
             drawer = fieldDrawer;
             return drawer;
@@ -243,7 +228,7 @@ namespace Wargon.Ecsape.Editor {
                     // if (drawer is not ObjectField field3)
                     //     field3 = new ObjectField();
                     // field3.objectType = value.GetType();
-                    Debug.Log($"bind = {bind} , index = {elementIndex}");
+                    //Debug.Log($"bind = {bind} , index = {elementIndex}");
                     return ConfigureArrayElementFieldInternal<ObjectField, Object>(drawer, value, array, list, elementIndex);
                 case Entity e:
                     if (drawer is not EntityField entityField) {
@@ -254,7 +239,6 @@ namespace Wargon.Ecsape.Editor {
                     entityField.UpdateViewAsElement(e, elementIndex);
                     return entityField;
             }
-
             return (VisualElement)null;
         }
 
@@ -277,19 +261,20 @@ namespace Wargon.Ecsape.Editor {
                 value = null;
             }
         }
-        private VisualElement ConfigureListView(object listField, IList listValue, Array arrayValue, object component, FieldInfo info, bool isArray, Type elementType) {
+        private VisualElement ConfigureListView(object listField, IList listValue, Array arrayValue, object component, FieldData info, bool isArray, Type elementType) {
 
             const string ADD_BUTTON = "unity-list-view__add-button";
             const string REMOVE_BUTTON = "unity-list-view__remove-button";
             const int itemHeight = 16;
             var isUnityObjectElementType = typeof(Object).IsAssignableFrom(elementType);
             listValue ??= isArray ? Array.CreateInstance(elementType, 1) : (IList)Generic.New(typeof(List<>), elementType, 1);
-            ListView listView = listField == null? new ListView(listValue, itemHeight) :(ListView)listField;
+            ListView listView = listField == null ? new ListView(listValue, itemHeight) : (ListView)listField;
             var counter = 0;
             VisualElement MakeItem() {
+                var item = isUnityObjectElementType ? null : CreateNewElement(elementType);
                 var element = CreateField(elementType);
                 //_updateLabelMethod(element, $"element[{counter++.ToString()}]");
-                ConfigureArrayElementField(listView.itemsSource[0], arrayValue, listValue, -1, element);
+                ConfigureArrayElementField(item, arrayValue, listValue, counter++, element);
                 return element;
             }
             void BindItems(VisualElement element, int index) {
@@ -320,7 +305,7 @@ namespace Wargon.Ecsape.Editor {
             listView.name = "unity-list-" + info.Name;
 
             listView.Q<Button>(ADD_BUTTON).clickable = new (() => {
-                var newItem = elementType == typeof(string) ? string.Empty : Activator.CreateInstance(elementType);
+                var newItem = elementType == typeof(string) ? string.Empty : isUnityObjectElementType ? null : Activator.CreateInstance(elementType);
                 if (isArray) {
                     var index = listValue.Count + 1;
                     var array = Array.CreateInstance(elementType, index);
@@ -337,6 +322,7 @@ namespace Wargon.Ecsape.Editor {
                     listValue.Add(newItem);
                     info.SetValue(component, listValue);
                     listView.itemsSource = listValue;
+                    
                 }
 
                 counter = 0;
@@ -344,11 +330,8 @@ namespace Wargon.Ecsape.Editor {
                 listView.Rebuild();
             });
             listView.Q<Button>(REMOVE_BUTTON).clickable = new (() => {
-                var removeIndex = listView.selectedIndex == -1
-                    ? listView.itemsSource.Count - 1
-                    : listView.selectedIndex;
+                int removeIndex = listView.selectedIndex == -1 ? listView.itemsSource.Count - 1 : listView.selectedIndex;
                 if (isArray) {
-                    
                     Array array = Array.CreateInstance(elementType, removeIndex);
                     for (var i = 0; i < listView.itemsSource.Count-1; i++) {
                         array.SetValue(listView.itemsSource[i], i);
@@ -358,7 +341,6 @@ namespace Wargon.Ecsape.Editor {
                     info.SetValue(component, array);
                 }
                 else {
-                    Debug.Log(removeIndex);
                     listView.itemsSource.RemoveAt(removeIndex);
                     info.SetValue(component, listView.itemsSource);
                 }
@@ -368,20 +350,10 @@ namespace Wargon.Ecsape.Editor {
                 listView.Rebuild();
                 listView.SetSelection(listView.itemsSource.Count-1);
             });
-            //listView.Rebuild();
-            // listView.RegisterCallback<ChangeEvent<IList>>(evt => {
-            //     Debug.Log("WWW");
-            //     info.SetValue(component, evt.newValue);
-            // });
-            // listView.RegisterCallback<ChangeEvent<int>>((changeEvent => {
-            //     //Debug.Log(itemsSource[0]);
-            //     info.SetValue(component, itemsSource);
-            // }));
-            //RegisterChangesOnCustomDrawerElement(listView, info, component);
             return listView;
         }
 
-        private VisualElement CreateOrUpdateField(object fieldValue, object targetInstance, FieldInfo info, object fieldDrawer = null) {
+        private VisualElement CreateOrUpdateField(object fieldValue, object targetInstance, FieldData info, object fieldDrawer = null) {
             switch (fieldValue) {
                 case Enum @enum:
                     var field = (EnumField)ConfigureFieldWrapped<EnumField, Enum>(fieldDrawer, @enum, targetInstance, info);
@@ -390,7 +362,6 @@ namespace Wargon.Ecsape.Editor {
                     return field;
                 case Entity e:
                     if (fieldDrawer == null) fieldDrawer = new EntityField(e);
-                    //var drawer = ConfigureFieldWrapped<EntityField, Entity>(fieldDrawer, fieldValue, component, info);
                     ((EntityField)fieldDrawer).UpdateView(e, info.Name);
                     return (EntityField)fieldDrawer;
                 // case byte:
@@ -412,8 +383,8 @@ namespace Wargon.Ecsape.Editor {
                 case Vector4:
                     return ConfigureFieldWrapped<Vector4Field, Vector4>(fieldDrawer, fieldValue, targetInstance, info);
                 case Object:
-                    fieldDrawer ??= new ObjectField();
-                    var field3 = (ObjectField)fieldDrawer;
+                    if (!(fieldDrawer is ObjectField field3))
+                        field3 = new ObjectField();
                     field3.objectType = info.FieldType;
                     return ConfigureFieldWrapped<ObjectField, Object>(field3, fieldValue, targetInstance, info);
             }
@@ -427,25 +398,24 @@ namespace Wargon.Ecsape.Editor {
             return (VisualElement) null;
         }
         
-        private VisualElement ConfigureFieldWrapped<TField, TValue>(object fieldDrawer, object fieldValue, object targetInstance, FieldInfo info, 
+        private VisualElement ConfigureFieldWrapped<TField, TValue>(object fieldDrawer, object fieldValue, object targetInstance, FieldData info, 
             (FieldInfo parentInfo, object parentInstance) parents = default)
             where TField : BaseField<TValue>, new() {
             return ConfigureField(fieldDrawer as TField, (TValue)fieldValue, targetInstance, info, () => new TField(), parents);
         }
         
         private VisualElement ConfigureField<TField, TValue>(TField fieldDrawer, TValue fieldValue, object targetInstance, 
-            FieldInfo info, Func<TField> factory, (FieldInfo info, object instance) parents)
+            FieldData info, Func<TField> factory, (FieldInfo info, object instance) parents)
             where TField : BaseField<TValue> {
 
             fieldDrawer ??= factory();
-
             fieldDrawer.label = info.Name;
-            if (fieldValue.Equals(fieldDrawer.value)) return fieldDrawer;
+            //if (fieldValue.Equals(fieldDrawer.value)) return fieldDrawer;
             fieldDrawer.SetValueWithoutNotify(fieldValue);
             fieldDrawer.RegisterValueChangedCallback(evt => {
                 if (evt.target != fieldDrawer)
                     return;
-                if (fieldValue.Equals(evt.newValue)) return;
+                if (evt.newValue.Equals(fieldValue)) return;
                 
                 fieldValue = evt.newValue;
                 if (Runtime) {
@@ -532,47 +502,76 @@ namespace Wargon.Ecsape.Editor {
         public static bool IsList(this Type type) {
             return typeof(IList).IsAssignableFrom(type);
         }
-        
+
+        public static bool IsUnityObject(this Type type) {
+            return typeof(UnityEngine.Object).IsAssignableFrom(type);
+        }
     }
 
-    internal class TypesCache {
-        public static Type String = typeof(string);
-        public static Type Integer = typeof(int);
-        public static Type Float = typeof(float);
-        public static Type Bool = typeof(bool);
-        public static Type Douable = typeof(double);
-        public static Type Vector2 = typeof(Vector2);
-        public static Type Vector3 = typeof(Vector3);
-        public static Type Vector4 = typeof(Vector4);
-        public static Type Vector2Int = typeof(Vector2Int);
-        public static Type Vector3Int = typeof(Vector3Int);
-        public static Type Entity = typeof(Entity);
-        public static Type Object = typeof(Object);
+    internal static class TypesCache {
+        public static readonly Type String = typeof(string);
+        public static readonly Type Integer = typeof(int);
+        public static readonly Type Float = typeof(float);
+        public static readonly Type Bool = typeof(bool);
+        public static readonly Type Douable = typeof(double);
+        public static readonly Type Vector2 = typeof(Vector2);
+        public static readonly Type Vector3 = typeof(Vector3);
+        public static readonly Type Vector4 = typeof(Vector4);
+        public static readonly Type Vector2Int = typeof(Vector2Int);
+        public static readonly Type Vector3Int = typeof(Vector3Int);
+        public static readonly Type Entity = typeof(Entity);
+        public static readonly Type Object = typeof(Object);
     }
     internal class FieldData {
         public string Name;
-        public Type Type;
-        public bool HasChilds;
-        public bool IsGeneric;
-        public Type GenericType;
+        public readonly Type FieldType;
+        public readonly bool HasChilds;
+        public readonly bool IsGeneric;
+        public readonly Type GenericType;
+        public readonly Type ParentType;
+                
+        private readonly ReflectionUtils.SetterDelegate setter;
+        private readonly Func<object, object> getter;
         public FieldData(FieldInfo info, Type instanceType) {
-            Type = info.FieldType;
-            HasChilds = Type.GetFields().Length > 0;
+            ParentType = instanceType;
+            FieldType = info.FieldType;
+            HasChilds = FieldType.GetFields().Length > 0;
             Name = info.Name;
-            IsGeneric = Type.IsGenericType;
+            IsGeneric = FieldType.IsGenericType;
+            GenericType = null;
+            
             if(IsGeneric)
-                GenericType = Type.GetGenericArguments()[0];
-            //setter = instanceType.CreateSetFieldDelegate<object, object>(info.Name);
-            //setter = ReflectionUtils.CreateSetter(info.Name);
-            //setter = ReflectionUtils.Setter();
-            getter = instanceType.FieldGetter(info);
-            setter = instanceType.FieldSetter(info);
+                GenericType = FieldType.GetGenericArguments()[0];
+            setter = info.CreateSetMethod();
+            getter = ParentType.FieldGetter(info);
         }
 
-        private readonly Action<object, object> setter;
-        private readonly Func<object, object> getter;
-        public void SetValue(object objInstance, object value) => setter.Invoke(objInstance, value);
+        public void SetValue(object obj, object value) {
+            setter(ref obj, value);
+        }
 
-        public object GetValue(object obj) => getter(obj);
+        public object GetValue(object obj) {
+            return getter(obj);
+        }
+    }
+
+    public partial class ComponentDrawer {
+        private static readonly Dictionary<string, ComponentDrawer> Drawers = new();
+        public static void Clear() => Drawers.Clear();
+        public static ComponentDrawer GetDrawer(Type type) {
+            return Drawers.TryGetValue(type.Name, out var drawer) ? drawer : null;
+        }
+        public static ComponentDrawer GetDrawer(int index) {
+            var type = Component.GetTypeOfComponent(index);
+            return Drawers.TryGetValue(type.Name, out var drawer) ? drawer : null;
+        }
+        public static ComponentDrawer GetDrawer(object component) {
+            var type = component.GetType();
+            if (Drawers.TryGetValue(type.Name, out var drawer)) return drawer;
+            drawer = new ComponentDrawer(type, component);
+            Drawers.Add(type.Name, drawer);
+            Debug.Log($"Drawer for {drawer.componentType.Name} created");
+            return drawer;
+        }
     }
 }

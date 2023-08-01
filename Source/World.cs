@@ -1,11 +1,8 @@
-﻿using UnityEngine.LowLevel;
-
-namespace Wargon.Ecsape {
-    using Pools;
+﻿namespace Wargon.Ecsape {
     using System;
     using System.Collections.Generic;
     using System.Runtime.CompilerServices;
-    
+
     public partial class World {
         
         private static readonly World[] worlds;
@@ -13,9 +10,7 @@ namespace Wargon.Ecsape {
         private readonly DirtyQueries dirtyQueries;
         private readonly ArrayList<int> freeEntities;
         private readonly string name;
-        
         private readonly byte selfIndex;
-        internal byte Index => selfIndex;
         
         private Query [] queries;
         private IPool [] pools;
@@ -28,6 +23,7 @@ namespace Wargon.Ecsape {
         private int poolSize;
         private int poolsCount;
         private int queriesCount;
+        internal byte Index => selfIndex;
         internal int QueriesCount => queriesCount;
         public int ActiveEntitiesCount => activeEntitiesCount;
         public string Name => name;
@@ -59,33 +55,16 @@ namespace Wargon.Ecsape {
 
         public void Init() {
             systems.Init();
-            // var systemRoot = new PlayerLoopSystem();
-            // systemRoot.subSystemList = new PlayerLoopSystem[]
-            // {
-            //     new PlayerLoopSystem()
-            //     {
-            //         updateDelegate = UpdateDelegate,
-            //         type = typeof(TestUpdate)
-            //     }
-            // };
-            // PlayerLoop.SetPlayerLoop(systemRoot);
-        }
-        public struct TestUpdate {
-            
-        }
-        private void UpdateDelegate() {
-            UnityEngine.Debug.Log("Update ecs");
         }
 
         private void Destroy() {
-            
             for (var i = 0; i < entities.Length; i++) {
                 OnDestroyEntity(ref entities[i]);
             }
-
             for (int i = 0; i < poolsCount; i++) {
                 pools[i].Clear();
             }
+
             Array.Clear(pools, 0, pools.Length);
             Array.Clear(entities, 0, entities.Length);
             Array.Clear(poolKeys, 0, poolKeys.Length);
@@ -94,11 +73,11 @@ namespace Wargon.Ecsape {
             Array.Clear(entityComponentsAmounts, 0, entityComponentsAmounts.Length);
             Array.Clear(archetypeIDs, 0, archetypeIDs.Length);
             _archetypes.Clear();
-            lastEntity=0;
-            activeEntitiesCount=0;
-            poolSize=0;
-            poolsCount=0;
-            queriesCount=0;
+            lastEntity = 0;
+            activeEntitiesCount = 0;
+            poolSize = 0;
+            poolsCount = 0;
+            queriesCount = 0;
         }
         public static World Default {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -279,8 +258,8 @@ namespace Wargon.Ecsape {
         }
  
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void ChangeEntityArchetype(int entity, int componentType, bool add) {
-            if(add)
+        internal void ChangeEntityArchetype(int entity, int componentType, bool addComponent) {
+            if(addComponent)
                 _archetypes.GetArchetype(archetypeIDs[entity]).TransferAdd(entity, in componentType);
             else
                 _archetypes.GetArchetype(archetypeIDs[entity]).TransferRemove(entity, in componentType);

@@ -9,11 +9,11 @@ namespace Wargon.Ecsape.Components {
     
     [Serializable]
     public struct Translation : IComponent {
-        /// World value
+        /// Local value
         public UnityEngine.Vector3 position;
-        /// World value
+        /// Local value
         public UnityEngine.Quaternion rotation;        
-        /// World value
+        /// Local value
         public UnityEngine.Vector3 scale;
 
         public UnityEngine.Vector3 right {

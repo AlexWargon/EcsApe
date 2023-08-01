@@ -1,11 +1,7 @@
-﻿using UnityEditor.UIElements;
-using UnityEngine.UIElements;
+﻿using UnityEngine.UIElements;
 
 namespace Wargon.Ecsape {
     using UnityEngine;
-#if UNITY_EDITOR
-    using UnityEditor;
-#endif
     public class WorldHolder : MonoBehaviour {
         protected World world;
         public World World => world;
@@ -17,7 +13,7 @@ namespace Wargon.Ecsape {
         }
     }
 #if UNITY_EDITOR
-    [CustomEditor(typeof(WorldHolder))]
+    [UnityEditor.CustomEditor(typeof(WorldHolder))]
     public class WorldHolderEditor : UnityEditor.Editor {
         public override VisualElement CreateInspectorGUI() {
             var view = target as WorldHolder;
@@ -25,7 +21,7 @@ namespace Wargon.Ecsape {
             
             var root = new VisualElement();
             if (world == null) return root;
-            var intfield = new IntegerField("entities");
+            var intfield = new UnityEditor.UIElements.IntegerField("entities");
             intfield.SetValueWithoutNotify(world.ActiveEntitiesCount);
             root.Add(intfield);
             

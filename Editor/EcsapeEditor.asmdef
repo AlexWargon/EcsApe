@@ -2,9 +2,12 @@
     "name": "EcsapeEditor",
     "rootNamespace": "Wargon.Ecsape.Editor",
     "references": [
-        "GUID:4ffe030d3442a7a428cb281c2c2d181b"
+        "GUID:4ffe030d3442a7a428cb281c2c2d181b",
+        "GUID:343deaaf83e0cee4ca978e7df0b80d21"
     ],
-    "includePlatforms": [],
+    "includePlatforms": [
+        "Editor"
+    ],
     "excludePlatforms": [],
     "allowUnsafeCode": true,
     "overrideReferences": false,

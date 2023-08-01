@@ -7,8 +7,39 @@ namespace Wargon.Ecsape {
     using System.Runtime.InteropServices;
     using Unity.Collections;
     using Unity.Collections.LowLevel.Unsafe;
+
+    public struct frr {
+
+    }
     public static class Extensions {
 
+
+        public struct frEach<T, V, C> 
+            where T: struct,IComponent
+            where C: struct,IComponent
+            where V: struct,IComponent {
+            public IPool<T> pT;
+            public IPool<C> pC;
+            public IPool<V> pV;
+
+            public void forEach(Action<T, V, C> eAction) { }
+        }
+        public static frEach<T, V, C> forEach<T, V, C>(this (T t, V v, C c) each) 
+            where T: struct,IComponent
+            where C: struct,IComponent
+            where V: struct,IComponent 
+        {
+            var pT = World.Default.GetPool<T>();
+            var pC = World.Default.GetPool<C>();
+            var pV = World.Default.GetPool<V>();
+
+            frEach<T, V, C> fr;
+            fr.pT = World.Default.GetPool<T>();
+            fr.pC = World.Default.GetPool<C>();
+            fr.pV = World.Default.GetPool<V>();
+            return fr;
+        }
+        
         public static Vector3 Random(float min, float max) {
             var n = UnityEngine.Random.Range(min, max);
             return new Vector3(n, n, n);
