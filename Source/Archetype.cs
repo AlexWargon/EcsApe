@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using UnityEngine;
 
 namespace Wargon.Ecsape {
     public sealed class Archetype {
@@ -66,7 +67,6 @@ namespace Wargon.Ecsape {
                 world.GetArchetypeId(entity) = edge.Add.archetypeTo;
                 return;
             }
-
             CreateEdges(in component);
             edge = Edges[component];
             edge.Add.Execute(in entity);
@@ -80,7 +80,6 @@ namespace Wargon.Ecsape {
                 world.GetArchetypeId(entity) = edge.Remove.archetypeTo;
                 return;
             }
-
             CreateEdges(in component);
             edge = Edges[component];
             edge.Remove.Execute(in entity);
@@ -192,6 +191,17 @@ namespace Wargon.Ecsape {
             return e;
         }
 
+        public Entity CopyEntity(in Entity toCopy) {
+            var toCreate = world.CreateEntity();
+            ref var componentsAmount = ref world.GetComponentAmount(in toCreate);
+            for (var i = 0; i < maskArray.Count; i++) {
+                world.GetPoolByIndex(maskArray.Types[i]).Copy(toCopy.Index, toCreate.Index);
+                componentsAmount++;
+            }
+            world.GetArchetypeId(toCreate.Index) = id;
+            AddEntity(toCreate.Index);
+            return toCreate;
+        }
         /// <param name="entity">Target entity</param>
         /// <returns>Array of all boxed components</returns>
         public List<object> GetAllComponents(in Entity entity) {
@@ -246,7 +256,7 @@ namespace Wargon.Ecsape {
 
         public Span<ComponentType> GetComponentTypes() {
             Span<ComponentType> span = new ComponentType[maskArray.Count];
-            for (var i = 0; i < maskArray.Count; i++) span[i] = Component.GetComponentType(maskArray.Types[i]);
+            for (var i = 0; i < maskArray.Count; i++) span[i] = ComponentMeta.GetComponentType(maskArray.Types[i]);
             return span;
         }
 
@@ -266,7 +276,7 @@ namespace Wargon.Ecsape {
         public override string ToString() {
             var toString = "Archetype<";
 
-            foreach (var i in hashMask) toString += $"{Component.GetComponentType(i).Name}, ";
+            foreach (var i in hashMask) toString += $"{ComponentMeta.GetComponentType(i).Name}, ";
             toString = toString.Remove(toString.Length - 2);
             toString += ">";
             return toString;

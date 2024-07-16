@@ -20,8 +20,8 @@ namespace Wargon.Ecsape {
 
         static Component() {
             Type = typeof(T);
-            Index = Component.GetIndex(Type);
-            ref var componentType = ref Component.GetComponentType(Index);
+            Index = ComponentMeta.GetIndex(Type);
+            ref var componentType = ref ComponentMeta.GetComponentType(Index);
             IsSingleTone = componentType.IsSingletone;
             IsTag = componentType.IsTag;
             IsEvent = componentType.IsEvent;
@@ -43,17 +43,13 @@ namespace Wargon.Ecsape {
     }
 
     public interface IComponent { }
-
-    public interface ISingletoneComponent { }
-
+    public interface ISharedComponent { }
     public interface IEventComponent { }
-
     public interface IClearOnEndOfFrame { }
-
     public interface IOnAddToEntity {
         void OnAdd();
     }
-
+    
     [Serializable]
     public readonly struct ComponentType : IEquatable<ComponentType> {
         public readonly int Index;
@@ -93,14 +89,14 @@ namespace Wargon.Ecsape {
         }
     }
 
-    public struct Component {
+    public struct ComponentMeta {
         private static readonly Dictionary<int, Type> typeByIndex;
         private static readonly Dictionary<Type, int> indexByType;
         private static ComponentType[] componentTypes;
         private static int count;
         public const int DESTROY_ENTITY = 0;
 
-        static Component() {
+        static ComponentMeta() {
             typeByIndex = new Dictionary<int, Type>();
             indexByType = new Dictionary<Type, int>();
             componentTypes = new ComponentType[32];
@@ -114,7 +110,7 @@ namespace Wargon.Ecsape {
             var componentType = new ComponentType
             (
                 index,
-                typeof(ISingletoneComponent).IsAssignableFrom(type),
+                typeof(ISharedComponent).IsAssignableFrom(type),
                 type.GetFields().Length == 0,
                 typeof(IEventComponent).IsAssignableFrom(type),
                 typeof(IClearOnEndOfFrame).IsAssignableFrom(type),
@@ -146,9 +142,8 @@ namespace Wargon.Ecsape {
 
     public static class ComponentExtensions {
         internal static Type GetTypeFromIndex(this int index) {
-            return Component.GetTypeOfComponent(index);
+            return ComponentMeta.GetTypeOfComponent(index);
         }
-
         public static bool IsUnManaged(this Type t) {
             var result = false;
 

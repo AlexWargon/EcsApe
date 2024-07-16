@@ -79,14 +79,11 @@ namespace Wargon.Ecsape.Editor {
         /// Nearly 4 times faster than regular DynamicMethods
         /// and as fast as other IL approaches
         /// </summary>
-        public static T CreateFastDynamicMethod<T>(string name, Action<ILGenerator> ilWriter) where T : Delegate
-        {
-            
+        public static T CreateFastDynamicMethod<T>(string name, Action<ILGenerator> ilWriter) where T : Delegate {
             var toBeImplementedMethodInfo = typeof(T).GetMethod("Invoke")!; // Invoke method of delegate
             var nameWithoutCollision = $"{name}_{Guid.NewGuid():N}";
             var typeBuilder = _moduleBuilder.DefineType(nameWithoutCollision, TypeAttributes.Public | TypeAttributes.Class);
-            var methodBuilder = typeBuilder.DefineMethod(
-                "Invoke",
+            var methodBuilder = typeBuilder.DefineMethod("Invoke",
                 MethodAttributes.Public | MethodAttributes.Static,
                 toBeImplementedMethodInfo.ReturnType,
                 toBeImplementedMethodInfo.GetParameters().Select(p => p.ParameterType).ToArray()

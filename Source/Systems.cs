@@ -59,7 +59,9 @@ namespace Wargon.Ecsape {
                 }
             }
         }
-
+        private static ISystem CreateClearEventSystem(Type eventType) {
+            return (ISystem) Generic.New(typeof(ClearEventsSystem<>), eventType, null);
+        }
 
         private static List<Type> GetGenericType(Type system, Type @interface) {
             var types = new List<Type>();
@@ -70,10 +72,6 @@ namespace Wargon.Ecsape {
             }
 
             return types;
-        }
-        
-        private static ISystem CreateClearEventSystem(Type eventType) {
-            return (ISystem) Generic.New(typeof(ClearEventsSystem<>), eventType, null);
         }
 
         public Systems SetInjector(IDependencyContainer container) {
@@ -90,7 +88,7 @@ namespace Wargon.Ecsape {
                 .GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)) {
                 if (fieldInfo.FieldType.GetInterface(nameof(IPool)) != null) {
                     var poolType = fieldInfo.FieldType.GetGenericArguments()[0];
-                    var componentTypeIndex = Component.GetIndex(poolType);
+                    var componentTypeIndex = ComponentMeta.GetIndex(poolType);
                     fieldInfo.SetValue(system, world.GetPoolByIndex(componentTypeIndex));
                 }
                 
@@ -134,7 +132,7 @@ namespace Wargon.Ecsape {
                     .GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)) {
                     if (fieldInfo.FieldType.GetInterface(nameof(IPool)) != null) {
                         var poolType = fieldInfo.FieldType.GetGenericArguments()[0];
-                        var componentTypeIndex = Component.GetIndex(poolType);
+                        var componentTypeIndex = ComponentMeta.GetIndex(poolType);
                         fieldInfo.SetValue(system, world.GetPoolByIndex(componentTypeIndex));
                     }
 
@@ -480,6 +478,10 @@ namespace Wargon.Ecsape {
                 transform.value.localScale = translation.scale;
             }
         }
+    }
+    
+    public interface IOnChanged<T> where T : struct, IComponent {
+        void Execute(World world);
     }
     [AttributeUsage(AttributeTargets.Class)]
     public class ClearAttribute : Attribute {

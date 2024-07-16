@@ -5,31 +5,31 @@ using Wargon.Ecsape.Components;
 using inline = System.Runtime.CompilerServices.MethodImplAttribute;
 
 namespace Wargon.Ecsape {
+
     [StructLayout(LayoutKind.Sequential)]
     [Serializable]
     public struct Entity : IEquatable<Entity> {
         public int Index;
-        internal bool alive;
+        internal bool Alive;
         internal byte WorldIndex;
 
         public World World {
             [inline(256)] get => World.Get(WorldIndex);
         }
 
-        [inline(256)]
+        [inline(256)] 
         public bool Equals(Entity other) {
             return Index == other.Index && WorldIndex == other.WorldIndex;
         }
 
-        [inline(256)]
+        [inline(256)] 
         public override int GetHashCode() {
             return Index;
         }
     }
 
     public static class EntityExtensions {
-        [inline(256)]
-        public static ref World GetWorld(in this Entity entity) {
+        [inline(256)] public static ref World GetWorld(in this Entity entity) {
             return ref World.Get(entity.WorldIndex);
         }
 
@@ -40,17 +40,17 @@ namespace Wargon.Ecsape {
         }
 
         [inline(256)]
-        public static ref T Get<T>(in this Entity entity) where T : struct, IComponent {
-            return ref entity.World.GetComponent<T>(in entity);
+        public static ref TComponent Get<TComponent>(in this Entity entity) where TComponent : struct, IComponent {
+            return ref entity.World.GetComponent<TComponent>(in entity);
         }
 
         [inline(256)]
-        public static void Add<T>(in this Entity entity) where T : struct, IComponent {
-            entity.World.Add<T>(in entity);
+        public static void Add<TComponent>(in this Entity entity) where TComponent : struct, IComponent {
+            entity.World.Add<TComponent>(in entity);
         }
 
         [inline(256)]
-        public static void Add<T>(in this Entity entity, in T component) where T : struct, IComponent {
+        public static void Add<TComponent>(in this Entity entity, in TComponent component) where TComponent : struct, IComponent {
             entity.World.Add(in entity, in component);
         }
 
@@ -70,7 +70,7 @@ namespace Wargon.Ecsape {
         }
 
         [inline(256)]
-        public static void Set<T>(in this Entity entity, in T component) where T : struct, IComponent {
+        public static void Set<TComponent>(in this Entity entity, in TComponent component) where TComponent : struct, IComponent {
             entity.World.Set(in entity, component);
         }
 
@@ -80,8 +80,8 @@ namespace Wargon.Ecsape {
         }
 
         [inline(256)]
-        public static void Remove<T>(in this Entity entity) where T : struct, IComponent {
-            entity.World.Remove<T>(in entity);
+        public static void Remove<TComponent>(in this Entity entity) where TComponent : struct, IComponent {
+            entity.World.Remove<TComponent>(in entity);
         }
 
         [inline(256)]
@@ -90,13 +90,13 @@ namespace Wargon.Ecsape {
         }
 
         [inline(256)]
-        public static void Remove(in this Entity entity, int type) {
+        internal static void Remove(in this Entity entity, int type) {
             entity.World.Remove(in entity, type);
         }
 
         [inline(256)]
-        public static bool Has<T>(in this Entity entity) where T : struct, IComponent {
-            return entity.World.Has<T>(in entity);
+        public static bool Has<TComponent>(in this Entity entity) where TComponent : struct, IComponent {
+            return entity.World.Has<TComponent>(in entity);
         }
 
         [inline(256)]
@@ -121,8 +121,8 @@ namespace Wargon.Ecsape {
         [inline(256)]
         public static void Destroy(in this Entity entity) {
             var world = entity.World;
-            world.GetPoolByIndex(Component.DESTROY_ENTITY).Add(entity.Index);
-            world.ChangeEntityArchetype(entity.Index, Component.DESTROY_ENTITY, true);
+            world.GetPoolByIndex(ComponentMeta.DESTROY_ENTITY).Add(entity.Index);
+            world.ChangeEntityArchetype(entity.Index, ComponentMeta.DESTROY_ENTITY, true);
         }
 
         /// <summary>
@@ -153,9 +153,15 @@ namespace Wargon.Ecsape {
         public static void AddChild(in this Entity entity, Entity child) {
             child.Get<Owner>().Entity = entity;
         }
-
+        
+        [inline(256)]
         internal static object GetBoxed(in this Entity entity, Type type) {
-            return entity.World.GetPoolByIndex(Component.GetIndex(type)).GetRaw(entity.Index);
+            return entity.World.GetPoolByIndex(ComponentMeta.GetIndex(type)).GetRaw(entity.Index);
+        }
+        
+        [inline(256)]
+        public static Entity Copy(in this Entity entity) {
+            return entity.GetArchetype().CopyEntity(in entity);
         }
     }
 
@@ -192,7 +198,7 @@ namespace Wargon.Ecsape {
 
         [inline(256)]
         internal void AddBoxed(in Entity entity, object component) {
-            var typeID = Component.GetIndex(component.GetType());
+            var typeID = ComponentMeta.GetIndex(component.GetType());
             if (GetArchetype(in entity).HasComponent(typeID)) return;
             GetPoolByIndex(typeID).AddBoxed(component, entity.Index);
             ChangeComponentsAmount(in entity, +1);
@@ -217,7 +223,7 @@ namespace Wargon.Ecsape {
 
         [inline(256)]
         internal void SetBoxed(in Entity entity, object component) {
-            var typeID = Component.GetIndex(component.GetType());
+            var typeID = ComponentMeta.GetIndex(component.GetType());
             var pool = GetPoolByIndex(typeID);
             if (GetArchetype(in entity).HasComponent(typeID))
                 pool.SetBoxed(component, entity.Index);
@@ -243,7 +249,7 @@ namespace Wargon.Ecsape {
 
         [inline(256)]
         internal void Remove(in Entity entity, Type type) {
-            var typeID = Component.GetIndex(type);
+            var typeID = ComponentMeta.GetIndex(type);
             if (!GetArchetype(in entity).HasComponent(typeID)) return;
             GetPoolByIndex(typeID).Remove(entity.Index);
             ref var componentsAmount = ref ChangeComponentsAmount(in entity, -1);

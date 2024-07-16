@@ -10,15 +10,16 @@ namespace Wargon.Ecsape {
         ComponentType Info { get; }
         void Add(int entity);
         void AddBoxed(object component, int entity);
-        unsafe void AddPtr(void* component, int entity);
+        
         void SetBoxed(object component, int entity);
+        unsafe void AddPtr(void* component, int entity);
         void Remove(int entity);
         bool Has(int entity);
         
         static IPool New(int size, int typeIndex) {
 
-            ref var info = ref Component.GetComponentType(typeIndex);
-            var componentType = Component.GetTypeOfComponent(typeIndex);
+            ref var info = ref ComponentMeta.GetComponentType(typeIndex);
+            var componentType = ComponentMeta.GetTypeOfComponent(typeIndex);
             var isTagPool = info.IsTag || info.IsSingletone || info.IsEvent;
             var isDisposablePool = info.IsDisposable;
             var isOnCreatePool = info.IsOnCreate;
@@ -35,6 +36,7 @@ namespace Wargon.Ecsape {
         void Resize(int newSize);
         object GetRaw(int index);
         void Clear();
+        void Copy(int from, int to);
     }
 
 
@@ -120,6 +122,11 @@ namespace Wargon.Ecsape {
 
         public void Clear() {
             Array.Clear(data, 0, data.Length);
+        }
+
+        public void Copy(int @from, int to) {
+            data[to] = data[@from];
+            count++;
         }
 
         [MethodImpl(256)]
@@ -251,7 +258,11 @@ namespace Wargon.Ecsape {
         void IPool.Clear() {
             
         }
-        
+
+        public void Copy(int @from, int to) {
+            count++;
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T Get(int entity) {
             return ref data;
@@ -337,7 +348,12 @@ namespace Wargon.Ecsape {
             Array.Clear(data, 0, data.Length);
             Array.Clear(entities, 0, entities.Length);
         }
-        
+
+        public void Copy(int @from, int to) {
+            data[to] = data[@from];
+            count++;
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T Get(int entity) {
             return ref data[entities[entity]];
@@ -439,7 +455,12 @@ namespace Wargon.Ecsape {
             Array.Clear(data, 0, data.Length);
             Array.Clear(entities, 0, entities.Length);
         }
-        
+
+        public void Copy(int @from, int to) {
+            data[to] = data[@from];
+            count++;
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T Get(int entity) {
             return ref data[entities[entity]];
@@ -583,6 +604,10 @@ namespace Wargon.Ecsape {
 
         public int[] GetRawEntities() {
             throw new NotImplementedException();
+        }
+
+        public void Copy(int from, int to) {
+            
         }
     }
 }

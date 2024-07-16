@@ -21,7 +21,7 @@ namespace Wargon.Ecsape {
             
             var root = new VisualElement();
             if (world == null) return root;
-            var intfield = new UnityEditor.UIElements.IntegerField("entities");
+            var intfield = new UnityEngine.UIElements.IntegerField("entities");
             intfield.SetValueWithoutNotify(world.ActiveEntitiesCount);
             root.Add(intfield);
             

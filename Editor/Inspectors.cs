@@ -96,24 +96,6 @@ namespace Wargon.Ecsape.Editor {
             }
         }
     }
-    
-    public static class ComponentInspectors {
-        private static readonly Dictionary<Type, UniversalComponentInspector> inspectors = new();
-        public static UniversalComponentInspector Get(Type type) {
-            if (inspectors.TryGetValue(type, out var inspector))
-                return inspector;
-            var newInspector = new UniversalComponentInspector();
-            newInspector.AddVisualTree(Styles.Confing.ComponentInspectorUXML);
-            newInspector.AddStyleSheet(Styles.Confing.ComponentInspectorUSS);
-            newInspector.Init(type);
-            inspectors.Add(type, newInspector);
-            return newInspector;
-        }
-
-        public static void Clear() {
-            inspectors.Clear();
-        }
-    }
 
     public abstract class BaseInspector : VisualElement {
         private object data;

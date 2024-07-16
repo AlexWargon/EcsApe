@@ -31,7 +31,7 @@ namespace Wargon.Ecsape.Editor {
         public static readonly StyleSheetConfing Confing;
         static Styles() {
             Confing = StyleSheetConfing.Instance;
-            ComponentDrawer.Clear();
+            ComponentDrawer.ClearAll();
         }
     }
 }

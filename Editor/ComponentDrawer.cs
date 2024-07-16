@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
+using JetBrains.Annotations;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -10,26 +11,23 @@ using Object = UnityEngine.Object;
 
 namespace Wargon.Ecsape.Editor {
     public partial class ComponentDrawer : VisualElement {
-
-
         private readonly List<FieldData> fieldsData = new();
         private readonly List<VisualElement> fieldsView = new();
-        private VisualElement fieldsRoot;
-        private VisualElement parent;
         private readonly Type componentType;
-        private EntityLink target;
+        private VisualElement thisParent;
+        private VisualElement fieldsRoot;
+        private EntityLink targetEntityLink;
         private object currentComponent;
-        private ref Entity entity => ref target.Entity;
-        private bool Runtime => target.IsLinked && !target.Entity.IsNull();
+        private ref Entity entity => ref targetEntityLink.Entity;
+        private bool Runtime => targetEntityLink.IsLinked && !targetEntityLink.Entity.IsNull();
         public ComponentDrawer(){}
 
         private Dictionary<string, FieldInfo[]> nestedFieldInfo = new Dictionary<string, FieldInfo[]>();
         private Dictionary<string, List<VisualElement>> nestedFieldVies = new Dictionary<string, List<VisualElement>>();
         private IMGUIContainer iMGUIContainer;
-        
-        public ComponentDrawer(Type type, object component) {
+
+        private ComponentDrawer(Type type, object component) {
             componentType = type;
-            //var temp = new BaseVisualElement();
             this.AddVisualTreeEx(Styles.Confing.ComponentInspectorUXML);
             this.AddStyleSheetEx(Styles.Confing.ComponentInspectorUSS);
             var componentInspector = this.Q<VisualElement>("ComponentInspector");
@@ -45,40 +43,38 @@ namespace Wargon.Ecsape.Editor {
             var remove = componentInspector.Q<Button>("Close");
             remove.clickable.clicked += OnClickRemoveComponent;
 
-            
-            var fieldsInfo = componentType.GetFields();
-            //iMGUIContainer = new IMGUIContainer(DrawComponentFieldsIMGUI);
-            //fieldsRoot.Add(iMGUIContainer);
-            foreach (var fieldInfo in fieldsInfo) {
-                // var fieldDrawer = CreateOrUpdateField(fieldInfo.GetValue(component), component, fieldInfo);
-                // fieldsView.Add(fieldDrawer);
-                // fieldsRoot.Add(fieldDrawer);
-                // if (fieldInfo.FieldType.IsDefined(typeof(SerializableAttribute), false) && !fieldInfo.FieldType.IsPrimitive) {
-                //     var nestedFoldout = new Foldout();
-                //     nestedFoldout.text = fieldInfo.Name;
-                //     var nestedFields = fieldInfo.FieldType.GetFields();
-                //     nestedFieldInfo.Add(fieldInfo.Name, nestedFields);
-                //     var nestedView = new List<VisualElement>();
-                //     foreach (var nestedField in nestedFields) {
-                //         var value = fieldInfo.GetValue(component);
-                //         var valueNested = nestedField.GetValue(value);
-                //         var nestedFieldDrawer = CreateOrUpdateField(valueNested, value, nestedField, null, fieldInfo, component);
-                //         nestedView.Add(nestedFieldDrawer);
-                //         nestedFoldout.Add(nestedFieldDrawer);
-                //     }
-                //     fieldsRoot.Add(nestedFoldout);
-                //     nestedFieldVies.Add(fieldInfo.Name, nestedView);
-                // }
-                // else 
-                //{
-                var fdata = new FieldData(fieldInfo, componentType);
-                fieldsData.Add(fdata);
-                var fieldDrawer = CreateOrUpdateField(fieldInfo.GetValue(component), component, fdata);
-                fieldsView.Add(fieldDrawer);
-                fieldsRoot.Add(fieldDrawer);
-                    
-                //}
-            }
+            //var fieldsInfo = componentType.GetFields();
+            iMGUIContainer = new IMGUIContainer(DrawComponentFieldsIMGUI);
+            fieldsRoot.Add(iMGUIContainer);
+            // foreach (var fieldInfo in fieldsInfo) {
+            //     // var fieldDrawer = CreateOrUpdateField(fieldInfo.GetValue(component), component, fieldInfo);
+            //     // fieldsView.Add(fieldDrawer);
+            //     // fieldsRoot.Add(fieldDrawer);
+            //     // if (fieldInfo.FieldType.IsDefined(typeof(SerializableAttribute), false) && !fieldInfo.FieldType.IsPrimitive) {
+            //     //     var nestedFoldout = new Foldout();
+            //     //     nestedFoldout.text = fieldInfo.Name;
+            //     //     var nestedFields = fieldInfo.FieldType.GetFields();
+            //     //     nestedFieldInfo.Add(fieldInfo.Name, nestedFields);
+            //     //     var nestedView = new List<VisualElement>();
+            //     //     foreach (var nestedField in nestedFields) {
+            //     //         var value = fieldInfo.GetValue(component);
+            //     //         var valueNested = nestedField.GetValue(value);
+            //     //         var nestedFieldDrawer = CreateOrUpdateField(valueNested, value, nestedField, null, fieldInfo, component);
+            //     //         nestedView.Add(nestedFieldDrawer);
+            //     //         nestedFoldout.Add(nestedFieldDrawer);
+            //     //     }
+            //     //     fieldsRoot.Add(nestedFoldout);
+            //     //     nestedFieldVies.Add(fieldInfo.Name, nestedView);
+            //     // }
+            //     // else 
+            //     //{
+            //     var fdata = new FieldData(fieldInfo, componentType);
+            //     fieldsData.Add(fdata);
+            //     var fieldDrawer = CreateOrUpdateField(fieldInfo.GetValue(component), component, fdata);
+            //     fieldsView.Add(fieldDrawer);
+            //     fieldsRoot.Add(fieldDrawer);
+            //     //}
+            // }
         }
 
         private void DrawComponentFieldsIMGUI() {
@@ -96,14 +92,15 @@ namespace Wargon.Ecsape.Editor {
                     string label = info.Name;
                     object oldValue = info.GetValue(currentComponent);
                     if (TypesCache.Object.IsAssignableFrom(type)) SetValue(info, EditorGUILayout.ObjectField(label, (Object)oldValue, info.FieldType, true), oldValue);
-                    else if (type == TypesCache.Integer) SetValue(info,EditorGUILayout.IntField(label, (int)oldValue), oldValue);
-                    else if (type == TypesCache.Float)SetValue(info,EditorGUILayout.FloatField(label, (float)oldValue), oldValue);
-                    else if (type == TypesCache.Douable)SetValue(info,EditorGUILayout.DoubleField(label, (double)oldValue), oldValue);
-                    else if (type == TypesCache.Bool)SetValue(info,EditorGUILayout.Toggle(label, (bool)oldValue), oldValue);
-                    else if (type == TypesCache.String)SetValue(info,EditorGUILayout.TextField(label, (string)oldValue), oldValue);
-                    else if (type == TypesCache.Vector2)SetValue(info,EditorGUILayout.Vector2Field(label, (Vector2)oldValue), oldValue);
-                    else if (type == TypesCache.Vector3)SetValue(info,EditorGUILayout.Vector3Field(label, (Vector3)oldValue), oldValue);
-                    else if (type == TypesCache.Vector4)SetValue(info,EditorGUILayout.Vector4Field(label, (Vector4)oldValue), oldValue);
+                    else if (type == TypesCache.Integer)          SetValue(info,EditorGUILayout.IntField(label, (int)oldValue), oldValue);
+                    else if (type == TypesCache.Float)            SetValue(info,EditorGUILayout.FloatField(label, (float)oldValue), oldValue);
+                    else if (type == TypesCache.Douable)          SetValue(info,EditorGUILayout.DoubleField(label, (double)oldValue), oldValue);
+                    else if (type == TypesCache.Bool)             SetValue(info,EditorGUILayout.Toggle(label, (bool)oldValue), oldValue);
+                    else if (type == TypesCache.String)           SetValue(info,EditorGUILayout.TextField(label, (string)oldValue), oldValue);
+                    else if (type == TypesCache.Vector2)          SetValue(info,EditorGUILayout.Vector2Field(label, (Vector2)oldValue), oldValue);
+                    else if (type == TypesCache.Vector3)          SetValue(info,EditorGUILayout.Vector3Field(label, (Vector3)oldValue), oldValue);
+                    else if (type == TypesCache.Vector4)          SetValue(info,EditorGUILayout.Vector4Field(label, (Vector4)oldValue), oldValue);
+                    
                 }
             }
         }
@@ -111,21 +108,21 @@ namespace Wargon.Ecsape.Editor {
             if (Runtime)
                 entity.Remove(componentType);
             else
-                target.Components.Remove(currentComponent);
+                targetEntityLink.Components.Remove(currentComponent);
             
-            this.parent.RemoveWithCheck(this);
+            this.thisParent.RemoveWithCheck(this);
         }
         
         public void UpdateData(object component, EntityLink target) {
             this.currentComponent = component;
-            this.target = target;
+            this.targetEntityLink = target;
             
-            for (var index = 0; index < fieldsData.Count; index++) {
-                var fieldInfo = fieldsData[index];
-                var fieldValue = fieldInfo.GetValue(component);
-                var drawer = fieldsView[index];
-                CreateOrUpdateField(fieldValue, component, fieldInfo, drawer);
-            }
+            // for (var index = 0; index < fieldsData.Count; index++) {
+            //     var fieldInfo = fieldsData[index];
+            //     var fieldValue = fieldInfo.GetValue(component);
+            //     var drawer = fieldsView[index];
+            //     CreateOrUpdateField(fieldValue, component, fieldInfo, drawer);
+            // }
             
             // fieldsRoot.Remove(iMGUIContainer);
             // iMGUIContainer = new IMGUIContainer(DrawComponentFieldsIMGUI);
@@ -160,10 +157,10 @@ namespace Wargon.Ecsape.Editor {
         }
 
         public void SetParent(VisualElement parent) {
-            if(ReferenceEquals(this.parent, parent)) return;
-            this.parent?.RemoveWithCheck(this);
-            this.parent = parent;
-            this.parent.Add(this);
+            if(ReferenceEquals(this.thisParent, parent)) return;
+            this.thisParent?.RemoveWithCheck(this);
+            this.thisParent = parent;
+            this.thisParent.Add(this);
         }
 
         private void UpdateFieldWrapped<TField, TValue>(object field, TValue fieldValue)  where TField : BaseField<TValue> => UpdateField<TField, TValue>((TField)field, fieldValue);
@@ -202,8 +199,7 @@ namespace Wargon.Ecsape.Editor {
             
             if (fieldValue.Equals(fieldDrawer.value)) return fieldDrawer;
             fieldDrawer.SetValueWithoutNotify(fieldValue);
-            drawer = fieldDrawer;
-            return drawer;
+            return fieldDrawer;
         }
         
         private VisualElement ConfigureArrayElementField(object value, Array array = null, IList list = null, int elementIndex = -1, VisualElement drawer = null, bool bind = false) {
@@ -309,7 +305,6 @@ namespace Wargon.Ecsape.Editor {
                 if (isArray) {
                     var index = listValue.Count + 1;
                     var array = Array.CreateInstance(elementType, index);
-                    var idx = 0;
                     for (var i = 0; i < listView.itemsSource.Count; i++) {
                         array.SetValue(listView.itemsSource[i], i);
                     }
@@ -326,7 +321,6 @@ namespace Wargon.Ecsape.Editor {
                 }
 
                 counter = 0;
-                //listView.RefreshItems();
                 listView.Rebuild();
             });
             listView.Q<Button>(REMOVE_BUTTON).clickable = new (() => {
@@ -361,7 +355,7 @@ namespace Wargon.Ecsape.Editor {
                     field.Init(@enum);
                     return field;
                 case Entity e:
-                    if (fieldDrawer == null) fieldDrawer = new EntityField(e);
+                    fieldDrawer ??= new EntityField(e);
                     ((EntityField)fieldDrawer).UpdateView(e, info.Name);
                     return (EntityField)fieldDrawer;
                 // case byte:
@@ -404,15 +398,16 @@ namespace Wargon.Ecsape.Editor {
             return ConfigureField(fieldDrawer as TField, (TValue)fieldValue, targetInstance, info, () => new TField(), parents);
         }
         
-        private VisualElement ConfigureField<TField, TValue>(TField fieldDrawer, TValue fieldValue, object targetInstance, 
-            FieldData info, Func<TField> factory, (FieldInfo info, object instance) parents)
-            where TField : BaseField<TValue> {
+        private VisualElement ConfigureField<TField, TValue>(TField fieldDrawer, TValue fieldValue, 
+            object targetComponentInstance, FieldData fieldData, Func<TField> factory, 
+            (FieldInfo info, object instance) parents) where TField : BaseField<TValue> {
 
             fieldDrawer ??= factory();
-            fieldDrawer.label = info.Name;
-            //if (fieldValue.Equals(fieldDrawer.value)) return fieldDrawer;
+            fieldDrawer.label = fieldData.Name;
+            if (fieldValue.Equals(fieldDrawer.value)) return fieldDrawer;
             fieldDrawer.SetValueWithoutNotify(fieldValue);
-            fieldDrawer.RegisterValueChangedCallback(evt => {
+
+            void test(ChangeEvent<TValue> evt) {
                 if (evt.target != fieldDrawer)
                     return;
                 if (evt.newValue.Equals(fieldValue)) return;
@@ -420,53 +415,54 @@ namespace Wargon.Ecsape.Editor {
                 fieldValue = evt.newValue;
                 if (Runtime) {
                     fieldDrawer.SetValueWithoutNotify(evt.newValue);
-                    info.SetValue(targetInstance, evt.newValue);
+                    fieldData.SetValue(targetComponentInstance, evt.newValue);
                     if (parents.instance != null) {
-                        parents.info.SetValue(parents.instance, targetInstance);
+                        parents.info.SetValue(parents.instance, targetComponentInstance);
                         entity.SetBoxed(parents.instance);
                     }
                     else {
-                        entity.SetBoxed(targetInstance);
+                        entity.SetBoxed(targetComponentInstance);
                     }
                 }
                 else {
-                    info.SetValue(targetInstance, evt.newValue);
+                    fieldData.SetValue(targetComponentInstance, evt.newValue);
 
                     if (parents.instance != null) {
-                        parents.info.SetValue(parents.instance, targetInstance);
+                        parents.info.SetValue(parents.instance, targetComponentInstance);
                     }
                 }
-            });
+            }
+
+            fieldDrawer.UnregisterValueChangedCallback(test);
+            fieldDrawer.RegisterValueChangedCallback(test);
             return fieldDrawer;
         }
         
-        private void RegisterChangesOnCustomDrawerElement(VisualElement customDrawer, FieldInfo info, object target)
+        private void RegisterChangesOnCustomDrawerElement([NotNull] CallbackEventHandler customDrawer, FieldData info, object target)
         {
-            customDrawer.RegisterCallback<ChangeEvent<int>>((changeEvent => {
-                info.SetValue(target, changeEvent.newValue);
-            }));
-            customDrawer.RegisterCallback<ChangeEvent<bool>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<float>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<double>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<string>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<Color>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<UnityEngine.Object>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<Enum>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<Vector2>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<Vector3>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<Vector4>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<Rect>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<AnimationCurve>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<Bounds>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<Gradient>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<Quaternion>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<Vector2Int>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<Vector3Int>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<Vector3Int>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<RectInt>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<BoundsInt>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<Hash128>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
-            customDrawer.RegisterCallback<ChangeEvent<Entity>>((changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<int>>((                   changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<bool>>((                  changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<float>>((                 changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<double>>((                changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<string>>((                changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<Color>>((                 changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<UnityEngine.Object>>((    changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<Enum>>((                  changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<Vector2>>((               changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<Vector3>>((               changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<Vector4>>((               changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<Rect>>((                  changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<AnimationCurve>>((        changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<Bounds>>((                changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<Gradient>>((              changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<Quaternion>>((            changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<Vector2Int>>((            changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<Vector3Int>>((            changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<Vector3Int>>((            changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<RectInt>>((               changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<BoundsInt>>((             changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<Hash128>>((               changeEvent => info.SetValue(target, changeEvent.newValue)));
+            customDrawer.RegisterCallback<ChangeEvent<Entity>>((                changeEvent => info.SetValue(target, changeEvent.newValue)));
         }
 
         private VisualElement CreateField(Type type) {
@@ -490,7 +486,7 @@ namespace Wargon.Ecsape.Editor {
         private delegate void UpdateLabelMethod(VisualElement element, string label);
     }
 
-    public static partial class Extensions {
+    public static class Extensions {
         public static void RemoveWithCheck(this VisualElement root, VisualElement element) {
             if (root.Contains(element)) {
                 root.Remove(element);
@@ -505,6 +501,13 @@ namespace Wargon.Ecsape.Editor {
 
         public static bool IsUnityObject(this Type type) {
             return typeof(UnityEngine.Object).IsAssignableFrom(type);
+        }
+        public static void AddStyleSheetEx(this VisualElement element, StyleSheet asset) {
+            element.styleSheets.Add(asset);
+        }
+        public static void AddVisualTreeEx(this VisualElement element, VisualTreeAsset asset) {
+            var labelFromUxml = asset.Instantiate();
+            element.Add(labelFromUxml);
         }
     }
 
@@ -557,12 +560,12 @@ namespace Wargon.Ecsape.Editor {
 
     public partial class ComponentDrawer {
         private static readonly Dictionary<string, ComponentDrawer> Drawers = new();
-        public static void Clear() => Drawers.Clear();
+        public static void ClearAll() => Drawers.Clear();
         public static ComponentDrawer GetDrawer(Type type) {
             return Drawers.TryGetValue(type.Name, out var drawer) ? drawer : null;
         }
         public static ComponentDrawer GetDrawer(int index) {
-            var type = Component.GetTypeOfComponent(index);
+            var type = ComponentMeta.GetTypeOfComponent(index);
             return Drawers.TryGetValue(type.Name, out var drawer) ? drawer : null;
         }
         public static ComponentDrawer GetDrawer(object component) {

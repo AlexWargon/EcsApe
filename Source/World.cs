@@ -143,7 +143,7 @@
                 freeEntities.RemoveLast();
                 activeEntitiesCount++;
                 entityComponentsAmounts[e.Index] = 0;
-                e.alive = true;
+                e.Alive = true;
                 return e;
             }
             
@@ -157,7 +157,7 @@
             Entity entity;
             entity.Index = lastEntity;
             entity.WorldIndex = selfIndex;
-            entity.alive = true;
+            entity.Alive = true;
             
             //entity.WorldNative = Native;
             entities[lastEntity] = entity;
@@ -184,7 +184,7 @@
             freeEntities.Add(index);
             entityComponentsAmounts[index] = -1;
             activeEntitiesCount--;
-            e.alive = false;
+            e.Alive = false;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void OnDestroyEntity(in Entity entity, ref sbyte componentsAmount) {
@@ -194,7 +194,7 @@
             archetypeRef.RemoveEntity(index);
 
             archetype = 0;
-            entities[entity.Index].alive = false;
+            entities[entity.Index].Alive = false;
             componentsAmount = -1;
             activeEntitiesCount--;
             freeEntities.Add(index);

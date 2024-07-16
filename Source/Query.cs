@@ -1,7 +1,7 @@
 ﻿
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
-
+using inline = System.Runtime.CompilerServices.MethodImplAttribute;
 namespace Wargon.Ecsape {
     using System;
     using System.Collections.Generic;
@@ -13,7 +13,7 @@ namespace Wargon.Ecsape {
         public int capacity;
         public int Count;
         private readonly int ResizeStep;
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [System.Runtime.CompilerServices.MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal ArrayList(int size, int resizeStep = 16) {
             Count = 0;
             capacity = size;
@@ -22,11 +22,11 @@ namespace Wargon.Ecsape {
         }
 
         public ref T this[int index] {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [inline(MethodImplOptions.AggressiveInlining)]
             get => ref buffer[index];
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [inline(MethodImplOptions.AggressiveInlining)]
         public void Add(T item) {
             if (capacity <= Count) {
                 capacity += ResizeStep;
@@ -147,7 +147,7 @@ namespace Wargon.Ecsape {
             Span<int> typesSpan = stackalloc int[types.Length];
 
             for (int i = 0; i < typesSpan.Length; i++) {
-                typesSpan[i] = Component.GetIndex(types[i]);
+                typesSpan[i] = ComponentMeta.GetIndex(types[i]);
             }
 
             var id = GetCustomHashCode(ref typesSpan);
@@ -399,17 +399,17 @@ namespace Wargon.Ecsape {
         
         public static Query WithAny(this Query query, params Type[] componentTypes) {
             foreach (var componentType in componentTypes) {
-                query.any.Add(Component.GetIndex(componentType));
+                query.any.Add(ComponentMeta.GetIndex(componentType));
             }
             return query;
         }
         
         public static Query With(this Query query, Type type) {
-            query.with.Add(Component.GetIndex(type));
+            query.with.Add(ComponentMeta.GetIndex(type));
             return query;
         }
         public static Query Without(this Query query, Type type) {
-            query.without.Add(Component.GetIndex(type));
+            query.without.Add(ComponentMeta.GetIndex(type));
             return query;
         }
         public static Query Aspect<T>(this Query query) where T : struct, IAspect {
